@@ -910,10 +910,9 @@ var auto_condition_trial = {
         // Debrief
         // -
 
-        
-var debrief = {
+        var debrief = {
             type: "html-button-response",
-            stimulus: "<div class='box'><h3>Завершение первой части</h3><p>Спасибо! Первая часть завершена.</p><p>Нажмите кнопку ниже, чтобы перейти к следующему заданию.</p></div>",
+            stimulus: "<div class='box'><h3>Завершение первой части</h3><p>Первая часть исследования завершена.</p><p>Нажмите кнопку ниже, чтобы перейти к следующему заданию.</p></div>",
             choices: ["Перейти к следующему заданию"],
 
 on_finish: function () {
@@ -947,7 +946,7 @@ on_finish: function () {
     var nextUrl = 'index_combined.html?participant_id=' + encodeURIComponent(participantId)
         + '&age=' + age
         + '&sex=' + sex
-        + '&condition=' + encodeURIComponent(CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION);
+        + '&c=' + encodeURIComponent(CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION);
     window.location.href = nextUrl;
 }
         };
@@ -1009,7 +1008,12 @@ on_finish: function () {
             personal_ratings[7],
             personal_ratings[8],
 
-            statistics_screen,
+            {
+                timeline: [statistics_screen],
+                conditional_function: function() {
+                    return DEBUG_CONDITION !== "no_elimination";
+                }
+            },
 
             {
                 type: "html-button-response",

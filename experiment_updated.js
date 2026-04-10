@@ -1,53 +1,6 @@
+
 (async function() {
-  const jsPsych = initJsPsych({
-    show_progress_bar: false,
-    auto_update_progress_bar: false,
-    on_finish: function() {
-      const pid = jsPsych.data.get().values()[0]?.participant_id || jsPsych.data.get().filter({trial_type: 'survey-html-form'}).last(1).values()[0]?.response?.participant_id || '001';
-      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const csv = jsPsych.data.get().csv();
-      downloadText(`${pid}_attractive_${stamp}.csv`, csv, 'text/csv');
-
-      document.body.innerHTML = `
-        <div class="jspsych-content" style="max-width:900px; margin:60px auto; font-family:Arial,sans-serif; text-align:center;">
-          <h2>Experiment finished</h2>
-          <p>Your data file has been downloaded to this device.</p>
-          <p><strong>Important:</strong> GitHub Pages does not save data to the repository by itself, because it is static hosting.</p>
-        </div>`;
-    }
-  });
-
-
-function getUrlParams() {
-  const params = new URLSearchParams(window.location.search);
-  return {
-    participant_id: params.get('participant_id') || '',
-    age: params.get('age') || '',
-    sex: params.get('sex') || '',
-    condition: params.get('condition') || ''
-  };
-}
-
-const incoming = getUrlParams();
-
-const feedbackMessages = {
-  harsh: "Вы не прошли тест. Такой результат значительно ниже ожидаемого уровня и свидетельствует о том, что задание было выполнено без должного внимания и усилий. Невнимательное выполнение задания подрывает общий результат и ставит под сомнение вашу ответственность при выполнении задания.",
-  supportive: "К сожалению, вы не получили желаемую оценку за это задание. Понимаем, что результаты подобных тестов могут различаться по разным причинам и иногда вызывать неприятные ощущения. Однако один показатель сам по себе не отражает ваших общих способностей или приложенных усилий."
-};
-
-function assignFeedbackCondition() {
-  return Math.random() < 0.5 ? 'harsh' : 'supportive';
-}
-
-const assignedFeedbackCondition = assignFeedbackCondition();
-const assignedFeedbackText = feedbackMessages[assignedFeedbackCondition];
-
-function instructionBlock(text) {
-  return `
-    <div style="max-width:880px; margin:0 auto; font-family:Arial,sans-serif; color:black; text-align:left; line-height:1.6; font-size:20px;">
-      ${text}
-    </div>`;
-}
+  let dataAlreadySaved = false;
 
   function downloadText(filename, text, mimeType) {
     const blob = new Blob([text], { type: mimeType });
@@ -59,6 +12,42 @@ function instructionBlock(text) {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  }
+
+  function attemptCloseWindow() {
+    try { window.open('', '_self'); } catch (e) {}
+    try { window.close(); } catch (e) {}
+    setTimeout(function() {
+      document.body.innerHTML = '';
+      try { window.location.replace('about:blank'); } catch (e) {}
+    }, 150);
+  }
+
+  const jsPsych = initJsPsych({
+    show_progress_bar: false,
+    auto_update_progress_bar: false,
+    on_finish: function() {
+      attemptCloseWindow();
+    }
+  });
+
+  function getUrlParams() {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      participant_id: params.get('participant_id') || '',
+      age: params.get('age') || '',
+      sex: params.get('sex') || '',
+      condition: params.get('c') || params.get('condition') || ''
+    };
+  }
+
+  const incoming = getUrlParams();
+
+  function instructionBlock(text) {
+    return `
+      <div style="max-width:880px; margin:0 auto; font-family:Arial,sans-serif; color:black; text-align:left; line-height:1.6; font-size:20px;">
+        ${text}
+      </div>`;
   }
 
   async function loadWorkbookRows(filename) {
@@ -153,6 +142,19 @@ function instructionBlock(text) {
       </div>`;
   }
 
+  const feedbackPool = [
+    {
+      feedback_condition: 'negative_controlling',
+      feedback_text: 'Вы не прошли тест. Такой результат значительно ниже ожидаемого уровня и свидетельствует о том, что задание было выполнено без должного внимания и усилий. Невнимательное выполнение задания подрывает общий результат и ставит под сомнение вашу ответственность при выполнении задания.'
+    },
+    {
+      feedback_condition: 'negative_supportive',
+      feedback_text: 'К сожалению, вы не получили желаемую оценку за это задание. Понимаем, что результаты подобных тестов могут различаться по разным причинам и иногда вызывать неприятные ощущения. Однако один показатель сам по себе не отражает ваших общих способностей или приложенных усилий.'
+    }
+  ];
+
+  const assignedFeedback = randomChoice(feedbackPool);
+
   let practiceRows = [];
   let mainRows = [];
   try {
@@ -165,7 +167,7 @@ function instructionBlock(text) {
       <div style="max-width:900px; margin:60px auto; font-family:Arial,sans-serif;">
         <h2>Loading error</h2>
         <p>${String(err.message)}</p>
-        <p>Put <code>index.html</code>, <code>experiment.js</code>, <code>practicepics.xlsx</code>, <code>pics.xlsx</code>, and your image files in the same folder.</p>
+        <p>Put <code>index_combined.html</code>, <code>experiment_updated.js</code>, <code>practicepics.xlsx</code>, <code>pics.xlsx</code>, and your image files in the same folder.</p>
       </div>`;
     throw err;
   }
@@ -190,7 +192,6 @@ function instructionBlock(text) {
     show_detailed_errors: true
   });
 
-if (incoming.participant_id || incoming.age || incoming.sex) {
   timeline.push({
     type: jsPsychCallFunction,
     func: function() {
@@ -199,33 +200,34 @@ if (incoming.participant_id || incoming.age || incoming.sex) {
         age: incoming.age || '',
         sex: incoming.sex || '',
         upstream_condition: incoming.condition || '',
-        feedback_condition: assignedFeedbackCondition,
-        feedback_text: assignedFeedbackText
+        feedback_condition: assignedFeedback.feedback_condition,
+        feedback_text: assignedFeedback.feedback_text
       });
     }
   });
-} else {
-  timeline.push({
-    type: jsPsychSurveyHtmlForm,
-    preamble: '<h3>Данные участника</h3>',
-    html: `
-      <p><label>Пол (1-М, 2-Ж): <input name="sex" required></label></p>
-      <p><label>Возраст: <input name="age" required></label></p>
-      <p><label>Номер участника: <input name="participant_id" value="001" required></label></p>
-    `,
-    button_label: 'Продолжить',
-    on_finish: function(data) {
-      jsPsych.data.addProperties({
-        participant_id: data.response.participant_id || '001',
-        age: data.response.age || '',
-        sex: data.response.sex || '',
-        upstream_condition: incoming.condition || '',
-        feedback_condition: assignedFeedbackCondition,
-        feedback_text: assignedFeedbackText
-      });
-    }
-  });
-}
+
+  if (!(incoming.participant_id || incoming.age || incoming.sex)) {
+    timeline.push({
+      type: jsPsychSurveyHtmlForm,
+      preamble: '<h3>Данные участника</h3>',
+      html: `
+        <p><label>Пол (1-М, 2-Ж): <input name="sex" required></label></p>
+        <p><label>Возраст: <input name="age" required></label></p>
+        <p><label>Номер участника: <input name="participant_id" value="001" required></label></p>
+      `,
+      button_label: 'Продолжить',
+      on_finish: function(data) {
+        jsPsych.data.addProperties({
+          participant_id: data.response.participant_id || '001',
+          age: data.response.age || '',
+          sex: data.response.sex || '',
+          upstream_condition: incoming.condition || '',
+          feedback_condition: assignedFeedback.feedback_condition,
+          feedback_text: assignedFeedback.feedback_text
+        });
+      }
+    });
+  }
 
   timeline.push({
     type: jsPsychFullscreen,
@@ -235,22 +237,22 @@ if (incoming.participant_id || incoming.age || incoming.sex) {
   });
 
   timeline.push({
-  type: jsPsychHtmlKeyboardResponse,
-  stimulus: instructionBlock(`
-    <div style="text-align:center; font-size:30px; font-weight:700; margin-bottom:26px;">Добро пожаловать!</div>
-    <p>В этом эксперименте вам нужно будет оценивать привлекательность лиц.</p>
-    <p>Сначала в центре экрана появится лицо.</p>
-    <p>После того как лицо исчезнет, в центре экрана будет показана оценка других участников.</p>
-    <p>Зелёный квадрат показывает, какую оценку поставило большинство других участников.</p>
-    <p>Вам нужно оценить лицо по шкале от 1 (очень непривлекательно) до 9 (очень привлекательно).</p>
-    <p>Пожалуйста, старайтесь давать оценку как можно быстрее, не раздумывая слишком долго.</p>
-    <p>Во время эксперимента постарайтесь держать взгляд направленным в центр экрана.</p>
-    <p>Сначала мы проведём короткую тренировочную серию, чтобы показать, как будет проходить эксперимент.</p>
-    <p style="margin-top:28px; text-align:center;"><strong>Если вы готовы, нажмите пробел, чтобы начать.</strong></p>
-  `),
-  choices: [' '],
-  data: { phase: 'instructions_1' }
-});
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: instructionBlock(`
+      <div style="text-align:center; font-size:30px; font-weight:700; margin-bottom:26px;">Добро пожаловать!</div>
+      <p>В этом эксперименте вам нужно будет оценивать привлекательность лиц.</p>
+      <p>Сначала в центре экрана появится лицо.</p>
+      <p>После того как лицо исчезнет, в центре экрана будет показана оценка других участников.</p>
+      <p>Зелёный квадрат показывает, какую оценку поставило большинство других участников.</p>
+      <p>Вам нужно оценить лицо по шкале от 1 (очень непривлекательно) до 9 (очень привлекательно).</p>
+      <p>Пожалуйста, старайтесь давать оценку как можно быстрее, не раздумывая слишком долго.</p>
+      <p>Во время эксперимента постарайтесь держать взгляд направленным в центр экрана.</p>
+      <p>Сначала мы проведём короткую тренировочную серию, чтобы показать, как будет проходить эксперимент.</p>
+      <p style="margin-top:28px; text-align:center;"><strong>Если вы готовы, нажмите пробел, чтобы начать.</strong></p>
+    `),
+    choices: [' '],
+    data: { phase: 'instructions_1' }
+  });
 
   timeline.push({
     type: jsPsychHtmlKeyboardResponse,
@@ -260,7 +262,7 @@ if (incoming.participant_id || incoming.age || incoming.sex) {
     data: { phase: 'fixation_before_practice' }
   });
 
-  const practiceProcedure = {
+  timeline.push({
     timeline: [
       {
         type: jsPsychImageKeyboardResponse,
@@ -297,66 +299,38 @@ if (incoming.participant_id || incoming.age || incoming.sex) {
     ],
     timeline_variables: practiceTrials,
     randomize_order: false
-  };
-  timeline.push(practiceProcedure);
-
-  timeline.push({
-  type: jsPsychHtmlKeyboardResponse,
-  stimulus: instructionBlock(`
-    <div style="text-align:center; font-size:28px; font-weight:700; margin-bottom:24px;">Тренировочная часть завершена.</div>
-    <p>Если вам всё ещё не совсем понятно, что нужно делать, пожалуйста, сообщите об этом экспериментатору.</p>
-    <p>Если всё понятно, пожалуйста, прочитайте следующее:</p>
-    <p>Работа, которую вы выполнили 5 минут назад, была оценена руководителем проекта.</p>
-    <p>Он(а) даст своё личное и честное мнение о выполненной вами работе.</p>
-    <p>Вам не нужно ничего делать с этим отзывом, кроме как внимательно его прочитать.</p>
-    <p>После того как вы его прочитаете, вы продолжите остальную часть эксперимента.</p>
-    <p style="margin-top:28px; text-align:center;"><strong>Если всё понятно и вы готовы прочитать отзыв, пожалуйста, нажмите ПРОБЕЛ.</strong></p>
-  `),
-  choices: [' '],
-  data: { phase: 'instructions_2' }
-});
-
-
-  timeline.push({
-    type: jsPsychHtmlKeyboardResponse,
-    stimulus: function() {
-      return instructionBlock(`
-        <div style="text-align:center; font-size:28px; font-weight:700; margin-bottom:24px;">Оценка выполнения</div>
-        <div style="padding:20px; border:1px solid #ccc; border-radius:12px; background:#fafafa;">
-          <p style="margin:0; font-size:22px; line-height:1.7;">${assignedFeedbackText}</p>
-        </div>
-        <p style="margin-top:28px; text-align:center;"><strong>Нажмите пробел, чтобы продолжить.</strong></p>
-      `);
-    },
-    choices: [' '],
-    data: {
-      phase: 'feedback_message',
-      feedback_condition: assignedFeedbackCondition,
-      feedback_text: assignedFeedbackText
-    }
   });
 
   timeline.push({
-    type: jsPsychSurveyLikert,
-    preamble: '<h3>Несколько вопросов о полученной оценке</h3><p>Пожалуйста, укажите, насколько вы согласны с каждым утверждением.</p>',
-    questions: [
-      {prompt: 'Я согласен(на) с данной оценкой.', labels: ['Совсем не согласен(на)','Скорее не согласен(на)','Ни то ни другое','Скорее согласен(на)','Полностью согласен(на)'], required: true},
-      {prompt: 'Эта оценка показалась мне справедливой.', labels: ['Совсем не согласен(на)','Скорее не согласен(на)','Ни то ни другое','Скорее согласен(на)','Полностью согласен(на)'], required: true},
-      {prompt: 'Эта оценка вызвала у меня неприятные ощущения.', labels: ['Совсем не согласен(на)','Скорее не согласен(на)','Ни то ни другое','Скорее согласен(на)','Полностью согласен(на)'], required: true}
-    ],
-    button_label: 'Продолжить',
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: instructionBlock(`
+      <div style="text-align:center; font-size:28px; font-weight:700; margin-bottom:24px;">Тренировочная часть завершена.</div>
+      <p>Если вам всё ещё не совсем понятно, что нужно делать, пожалуйста, сообщите об этом экспериментатору.</p>
+      <p>Если всё понятно, пожалуйста, прочитайте следующее:</p>
+      <p>Работа, которую вы выполнили 5 минут назад, была оценена руководителем проекта.</p>
+      <p>Он(а) даст своё личное и честное мнение о выполненной вами работе.</p>
+      <p>Вам не нужно ничего делать с этим отзывом, кроме как внимательно его прочитать.</p>
+      <p>После того как вы его прочитаете, вы продолжите остальную часть эксперимента.</p>
+      <p style="margin-top:28px; text-align:center;"><strong>Если всё понятно и вы готовы прочитать отзыв, пожалуйста, нажмите ПРОБЕЛ.</strong></p>
+    `),
+    choices: [' '],
+    data: { phase: 'instructions_2' }
+  });
+
+  timeline.push({
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: instructionBlock(`
+      <div style="max-width:900px; margin:0 auto;">
+        <div style="text-align:center; font-size:30px; font-weight:700; margin-bottom:26px;">Оценка выполненного задания</div>
+        <p style="font-size:24px; line-height:1.6;">${assignedFeedback.feedback_text}</p>
+        <p style="margin-top:28px; text-align:center;"><strong>Нажмите пробел, чтобы продолжить.</strong></p>
+      </div>
+    `),
+    choices: [' '],
     data: {
-      phase: 'feedback_questionnaire',
-      feedback_condition: assignedFeedbackCondition,
-      feedback_text: assignedFeedbackText
-    },
-    on_finish: function(data) {
-      try {
-        const r = data.response || {};
-        data.assessment_agreement = (r.Q0 ?? null);
-        data.assessment_fairness = (r.Q1 ?? null);
-        data.assessment_unpleasant = (r.Q2 ?? null);
-      } catch (e) {}
+      phase: 'feedback_message',
+      feedback_condition: assignedFeedback.feedback_condition,
+      feedback_text: assignedFeedback.feedback_text
     }
   });
 
@@ -368,7 +342,7 @@ if (incoming.participant_id || incoming.age || incoming.sex) {
     data: { phase: 'fixation_before_main' }
   });
 
-  const mainProcedure = {
+  timeline.push({
     timeline: [
       {
         type: jsPsychImageKeyboardResponse,
@@ -405,26 +379,116 @@ if (incoming.participant_id || incoming.age || incoming.sex) {
     ],
     timeline_variables: mainTrials,
     randomize_order: false
-  };
-  timeline.push(mainProcedure);
-
+  });
 
   timeline.push({
-    type: jsPsychSurveyText,
-    preamble: '<h3>Завершение</h3><p>Пожалуйста, ответьте еще на несколько вопросов.</p>',
+    type: jsPsychSurveyLikert,
+    preamble: '<h3>Несколько вопросов о только что увиденной обратной связи</h3><p>Пожалуйста, оцените, насколько вы согласны со следующими утверждениями.</p>',
     questions: [
-      {prompt: 'Как вы думаете, какова была цель этого исследования?', rows: 3, columns: 60, required: false},
-      {prompt: 'Как вам кажется, было ли в исследовании что-то скрыто от участников или намеренно искажено?', rows: 3, columns: 60, required: false},
-      {prompt: 'Если да, то в чем, по вашему мнению, заключался этот скрытый элемент или обман?', rows: 3, columns: 60, required: false},
-      {prompt: 'Заметили ли вы что-то необычное или подозрительное в ходе исследования?', rows: 3, columns: 60, required: false},
-      {prompt: 'Дополнительный комментарий (необязательно):', rows: 3, columns: 60, required: false}
+      {
+        prompt: 'Я согласен(согласна) с данной оценкой.',
+        labels: ['Совершенно не согласен(на)', 'Скорее не согласен(на)', 'Ни то ни другое', 'Скорее согласен(на)', 'Полностью согласен(на)'],
+        required: true
+      },
+      {
+        prompt: 'Эта оценка показалась мне справедливой.',
+        labels: ['Совершенно не согласен(на)', 'Скорее не согласен(на)', 'Ни то ни другое', 'Скорее согласен(на)', 'Полностью согласен(на)'],
+        required: true
+      },
+      {
+        prompt: 'Это сообщение вызвало у меня неприятные ощущения.',
+        labels: ['Совершенно не согласен(на)', 'Скорее не согласен(на)', 'Ни то ни другое', 'Скорее согласен(на)', 'Полностью согласен(на)'],
+        required: true
+      }
     ],
-    button_label: 'Завершить',
+    button_label: 'Продолжить',
     data: {
-      phase: 'suspicion_probe',
-      feedback_condition: assignedFeedbackCondition,
-      feedback_text: assignedFeedbackText
+      phase: 'post_task_feedback_questionnaire',
+      feedback_condition: assignedFeedback.feedback_condition
+    },
+    on_finish: function(data) {
+      const r = data.response || {};
+      data.agree_with_assessment = (r.Q0 ?? null) !== null ? Number(r.Q0) + 1 : null;
+      data.assessment_fairness = (r.Q1 ?? null) !== null ? Number(r.Q1) + 1 : null;
+      data.assessment_unpleasant = (r.Q2 ?? null) !== null ? Number(r.Q2) + 1 : null;
     }
+  });
+
+  timeline.push({
+    type: jsPsychSurveyHtmlForm,
+    preamble: '<h3>Несколько завершающих вопросов</h3><p>Пожалуйста, ответьте максимально честно.</p>',
+    html: `
+      <p><label>Как вы думаете, какова была настоящая цель исследования?<br><textarea name="study_goal_guess" rows="4" cols="70" required></textarea></label></p>
+      <p><label>Было ли у вас ощущение, что в исследовании использовалась не полностью точная информация или скрытая часть процедуры?<br>
+        <select name="suspected_deception" required>
+          <option value="">Выберите ответ</option>
+          <option value="no">Нет</option>
+          <option value="yes">Да</option>
+          <option value="unsure">Не уверен(а)</option>
+        </select></label></p>
+      <p><label>Если да или если у вас были подозрения, напишите, в чём, по вашему мнению, это заключалось.<br><textarea name="deception_guess" rows="4" cols="70"></textarea></label></p>
+      <p><label>Было ли что-то необычное или вызывающее сомнение в ходе исследования?<br><textarea name="unusual_noticed" rows="4" cols="70"></textarea></label></p>
+      <p><label>Дополнительный комментарий (необязательно).<br><textarea name="final_comment" rows="4" cols="70"></textarea></label></p>
+    `,
+    button_label: 'Продолжить',
+    data: { phase: 'suspicion_probe' }
+  });
+
+  timeline.push({
+    type: jsPsychCallFunction,
+    func: function() {
+      if (dataAlreadySaved) return;
+      const pid = jsPsych.data.get().values()[0]?.participant_id || '001';
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const csv = jsPsych.data.get().csv();
+      downloadText(`${pid}_attractive_${stamp}.csv`, csv, 'text/csv');
+      dataAlreadySaved = true;
+    },
+    data: { phase: 'data_saved_before_debrief' }
+  });
+
+  timeline.push({
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: instructionBlock(`
+      <div style="white-space:pre-line; max-width:900px; margin:0 auto;">
+Спасибо за участие в нашем исследовании.
+
+Цель исследования
+
+Цель данного исследования: изучить, как подростки принимают
+решения и как реагируют на различные формы социальной информации и
+обратной связи.
+Чтобы результаты исследования были достоверными, не вся информация
+о процедуре исследования сообщалась участникам заранее.
+
+Оценочные сообщения
+
+Во время выполнения математического задания некоторые участники
+могли получать сообщения с оценкой результата. Эти сообщения
+являлись частью экспериментальной процедуры и не отражали реальный
+уровень способностей или усилий участника.
+Такая процедура используется в психологических исследованиях для
+изучения того, как люди реагируют на различные виды обратной связи.
+
+Ваши данные
+
+Все данные, полученные в ходе исследования, будут обезличены.
+Результаты исследования могут быть использованы в научных
+публикациях только в обобщённом виде.
+
+Контакт исследователя
+
+Если у вас или у вашего родителя/законного представителя возникли
+вопросы о данном исследовании, вы можете связаться с исследователем.
+
+Контакт:
+Тотурбиев Бадыр
+badyrc@mail.ru
+      </div>
+      <p style="margin-top:28px; text-align:center;"><strong>Нажмите пробел, чтобы завершить.</strong></p>
+    `),
+    choices: [' '],
+    data: { phase: 'final_debrief' }
   });
 
   timeline.push({
