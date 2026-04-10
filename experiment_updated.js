@@ -1,6 +1,8 @@
 
 (async function() {
   let dataAlreadySaved = false;
+  const RESPONSES_REQUIRED = false;
+  function isResponseRequired() { return RESPONSES_REQUIRED; }
 
   function downloadText(filename, text, mimeType) {
     const blob = new Blob([text], { type: mimeType });
@@ -211,9 +213,9 @@
       type: jsPsychSurveyHtmlForm,
       preamble: '<h3>Данные участника</h3>',
       html: `
-        <p><label>Пол (1-М, 2-Ж): <input name="sex" required></label></p>
-        <p><label>Возраст: <input name="age" required></label></p>
-        <p><label>Номер участника: <input name="participant_id" value="001" required></label></p>
+        <p><label>Пол (1-М, 2-Ж): <input name="sex" ${isResponseRequired() ? "required" : ""}></label></p>
+        <p><label>Возраст: <input name="age" ${isResponseRequired() ? "required" : ""}></label></p>
+        <p><label>Номер участника: <input name="participant_id" value="001" ${isResponseRequired() ? "required" : ""}></label></p>
       `,
       button_label: 'Продолжить',
       on_finish: function(data) {
@@ -382,23 +384,34 @@
   });
 
   timeline.push({
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: instructionBlock(`
+      <div style="text-align:center; font-size:28px; font-weight:700; margin-bottom:24px;">Основная часть задания завершена.</div>
+      <p>Сейчас вам будет предложено ответить на несколько коротких вопросов о сообщении, которое вы увидели ранее.</p>
+      <p style="margin-top:28px; text-align:center;"><strong>Нажмите пробел, чтобы продолжить.</strong></p>
+    `),
+    choices: [' '],
+    data: { phase: 'post_task_signpost' }
+  });
+
+  timeline.push({
     type: jsPsychSurveyLikert,
     preamble: '<h3>Несколько вопросов о только что увиденной обратной связи</h3><p>Пожалуйста, оцените, насколько вы согласны со следующими утверждениями.</p>',
     questions: [
       {
         prompt: 'Я согласен(согласна) с данной оценкой.',
         labels: ['Совершенно не согласен(на)', 'Скорее не согласен(на)', 'Ни то ни другое', 'Скорее согласен(на)', 'Полностью согласен(на)'],
-        required: true
+        required: isResponseRequired()
       },
       {
         prompt: 'Эта оценка показалась мне справедливой.',
         labels: ['Совершенно не согласен(на)', 'Скорее не согласен(на)', 'Ни то ни другое', 'Скорее согласен(на)', 'Полностью согласен(на)'],
-        required: true
+        required: isResponseRequired()
       },
       {
         prompt: 'Это сообщение вызвало у меня неприятные ощущения.',
         labels: ['Совершенно не согласен(на)', 'Скорее не согласен(на)', 'Ни то ни другое', 'Скорее согласен(на)', 'Полностью согласен(на)'],
-        required: true
+        required: isResponseRequired()
       }
     ],
     button_label: 'Продолжить',
@@ -418,7 +431,7 @@
     type: jsPsychSurveyHtmlForm,
     preamble: '<h3>Несколько завершающих вопросов</h3><p>Пожалуйста, ответьте максимально честно.</p>',
     html: `
-      <p><label>Как вы думаете, какова была настоящая цель исследования?<br><textarea name="study_goal_guess" rows="4" cols="70" required></textarea></label></p>
+      <p><label>Как вы думаете, какова была настоящая цель исследования?<br><textarea name="study_goal_guess" rows="4" cols="70"></textarea></label></p>
       <p><label>Было ли у вас ощущение, что в исследовании использовалась не полностью точная информация или скрытая часть процедуры?<br>
         <select name="suspected_deception" required>
           <option value="">Выберите ответ</option>
