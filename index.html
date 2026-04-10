@@ -910,10 +910,11 @@ var auto_condition_trial = {
         // Debrief
         // -
 
-        var debrief = {
+        
+var debrief = {
             type: "html-button-response",
-            stimulus: "<div class='box'><h3>Переход к следующей части</h3><p>Первая часть завершена. Нажмите кнопку ниже, чтобы перейти к следующему заданию.</p></div>",
-            choices: ["Продолжить"],
+            stimulus: "<div class='box'><h3>Завершение первой части</h3><p>Спасибо! Первая часть завершена.</p><p>Нажмите кнопку ниже, чтобы перейти к следующему заданию.</p></div>",
+            choices: ["Перейти к следующему заданию"],
 
 on_finish: function () {
 
@@ -941,12 +942,13 @@ on_finish: function () {
     var demoResponses = (typeof demoTrial.responses === 'string') ? JSON.parse(demoTrial.responses) : (demoTrial.responses || {});
     var genderTrial = jsPsych.data.get().filter({ questionnaire_item: 'gender' }).last(1).values()[0] || {};
     var participantId = 'P' + Date.now();
-    var nextUrl = new URL('./index_combined.html', window.location.href);
-    nextUrl.searchParams.set('participant_id', participantId);
-    nextUrl.searchParams.set('age', demoResponses.Q0 || '');
-    nextUrl.searchParams.set('sex', genderTrial.gender_label || '');
-    nextUrl.searchParams.set('condition', CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION);
-    window.location.assign(nextUrl.toString());
+    var age = encodeURIComponent(demoResponses.Q0 || '');
+    var sex = encodeURIComponent(genderTrial.gender_label || '');
+    var nextUrl = 'index_combined.html?participant_id=' + encodeURIComponent(participantId)
+        + '&age=' + age
+        + '&sex=' + sex
+        + '&condition=' + encodeURIComponent(CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION);
+    window.location.href = nextUrl;
 }
         };
 
