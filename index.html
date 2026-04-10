@@ -230,6 +230,8 @@
             return "control";
         })();
 
+        var SKIP_QUESTIONNAIRES = false;
+
 
         // -
         // Render ranking UI
@@ -616,6 +618,18 @@
                 "<p>Цель данного исследования - изучение потребительских предпочтений подростков.</p>" +
                 "<p>Перед началом основного задания вам будет предложено ответить на несколько вопросов.</p></div>",
             choices: ["Продолжить"]
+        };
+
+
+        var start_mode_screen = {
+            type: "html-button-response",
+            stimulus:
+                "<div class='box'><h3>Запуск</h3>" +
+                "<p>Выберите режим запуска.</p></div>",
+            choices: ["Обычный запуск", "Debug: пропустить анкеты"],
+            on_finish: function(data) {
+                SKIP_QUESTIONNAIRES = (data.button_pressed === "1" || data.button_pressed === 1);
+            }
         };
 
         var questionnaire_intro = {
@@ -1232,29 +1246,352 @@
             return faceTimeline;
         }
 
+        
+        // -
+        // Face task setup
+        // -
+
+        var face_practice_trials = [];
+        var face_main_trials = [];
+
+        function faceInstructionHtml(text) {
+            return "<div style='max-width:820px; margin:0 auto; font-family:Arial,sans-serif; color:black; text-align:left; line-height:1.55; font-size:22px;'>" + text + "</div>";
+        }
+
+        function faceRandomChoice(arr) {
+            return arr[Math.floor(Math.random() * arr.length)];
+        }
+
+        function faceShuffle(arr) {
+            var copy = arr.slice();
+            for (var i = copy.length - 1; i > 0; i--) {
+                var j = Math.floor(Math.random() * (i + 1));
+                var tmp = copy[i];
+                copy[i] = copy[j];
+                copy[j] = tmp;
+            }
+            return copy;
+        }
+
+        function faceNormalizeRow(row) {
+            var out = {};
+            Object.keys(row).forEach(function(key) {
+                out[String(key).trim().toLowerCase()] = row[key];
+            });
+            return out;
+        }
+
+        function faceFirstExisting(row, keys, fallback) {
+            if (fallback === undefined) fallback = "";
+            for (var i = 0; i < keys.length; i++) {
+                var key = keys[i];
+                if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== "") {
+                    return row[key];
+                }
+            }
+            return fallback;
+        }
+
+        function faceLoadWorkbookRows(filename) {
+            return fetch(filename, { cache: "no-store" })
+                .then(function(response) {
+                    if (!response.ok) throw new Error("Could not load " + filename + " (HTTP " + response.status + ")");
+                    return response.arrayBuffer();
+                })
+                .then(function(arrayBuffer) {
+                    var workbook = XLSX.read(arrayBuffer, { type: "array" });
+                    var sheetName = workbook.SheetNames[0];
+                    var sheet = workbook.Sheets[sheetName];
+                    return XLSX.utils.sheet_to_json(sheet, { defval: "" });
+                });
+        }
+
+        function buildFacePracticeTrials(rows) {
+            return rows.map(function(raw, index) {
+                var row = faceNormalizeRow(raw);
+                var image = faceFirstExisting(row, ["pra", "practiceimage", "image", "img", "stimulus"]);
+                if (!image) throw new Error("practicepics.xlsx row " + (index + 2) + " has no image column. Expected 'pra'.");
+                var majority = Number(faceFirstExisting(row, ["picked", "majority", "rating", "consensus"], NaN));
+                return {
+                    stimulus_image: String(image).trim(),
+                    majority_rating: isFinite(majority) ? majority : faceRandomChoice([3, 4, 6, 7])
+                };
+            });
+        }
+
+        function buildFaceMainTrials(rows) {
+            return rows.map(function(raw, index) {
+                var row = faceNormalizeRow(raw);
+                var image = faceFirstExisting(row, ["target", "image", "img", "stimulus"]);
+                if (!image) throw new Error("pics.xlsx row " + (index + 2) + " has no image column. Expected 'target'.");
+                var majority = Number(faceFirstExisting(row, ["picked", "majority", "rating", "consensus"], NaN));
+                return {
+                    stimulus_image: String(image).trim(),
+                    majority_rating: isFinite(majority) ? majority : faceRandomChoice([3, 4, 6, 7])
+                };
+            });
+        }
+
+        function faceRatingHtml(majorityRating) {
+            var cells = "";
+            for (var i = 1; i <= 9; i++) {
+                var cls = (i === Number(majorityRating)) ? "face-scale-cell face-highlight" : "face-scale-cell";
+                cells += "<div class='" + cls + "'>" + i + "</div>";
+            }
+            return "<div class='face-rating-wrap'>" +
+                "<div class='face-scale-row'>" + cells + "</div>" +
+                "<div class='face-response-hint'>Оцените лицо по шкале 1–9, используя клавиши 1–9 на клавиатуре</div>" +
+                "</div>";
+        }
+
+        var face_load_materials = {
+            type: "call-function",
+            async: true,
+            func: function(done) {
+                Promise.all([
+                    faceLoadWorkbookRows("practicepics.xlsx"),
+                    faceLoadWorkbookRows("pics.xlsx")
+                ]).then(function(results) {
+                    var p = faceShuffle(buildFacePracticeTrials(results[0]));
+                    var m = faceShuffle(buildFaceMainTrials(results[1]));
+                    face_practice_trials.splice(0, face_practice_trials.length);
+                    face_main_trials.splice(0, face_main_trials.length);
+                    Array.prototype.push.apply(face_practice_trials, p);
+                    Array.prototype.push.apply(face_main_trials, m);
+                    done();
+                }).catch(function(err) {
+                    document.body.innerHTML =
+                        "<div style='max-width:900px; margin:60px auto; font-family:Arial,sans-serif;'>" +
+                        "<h2>Loading error</h2>" +
+                        "<p>" + String(err.message) + "</p>" +
+                        "<p>Put this HTML file, practicepics.xlsx, pics.xlsx, and your image files in the same folder, and run it through a local server.</p>" +
+                        "</div>";
+                    throw err;
+                });
+            }
+        };
+
+        var face_fullscreen = {
+            type: "fullscreen",
+            fullscreen_mode: true,
+            message: "<p>Следующая часть эксперимента перейдёт в полноэкранный режим.</p>",
+            button_label: "Начать"
+        };
+
+        var face_intro = {
+            type: "html-keyboard-response",
+            stimulus: faceInstructionHtml(
+                "Добро пожаловать!<br><br>" +
+                "В этом эксперименте вам нужно будет оценивать привлекательность лиц.<br><br>" +
+                "Сначала в центре экрана появится лицо.<br><br>" +
+                "После того как лицо исчезнет, в центре экрана будет показана оценка других участников.<br><br>" +
+                "Зелёный квадрат показывает, какую оценку поставило большинство других участников.<br><br>" +
+                "Вам нужно оценить лицо по шкале от 1 (очень непривлекательно) до 9 (очень привлекательно), используя цифры 1–9 на клавиатуре.<br><br>" +
+                "Пожалуйста, старайтесь давать оценку как можно быстрее, не раздумывая слишком долго.<br><br>" +
+                "Во время эксперимента постарайтесь держать взгляд направленным в центр экрана.<br><br>" +
+                "Сначала мы проведём короткую тренировочную серию, чтобы показать, как будет проходить эксперимент.<br><br>" +
+                "Если вы готовы, нажмите пробел, чтобы начать."
+            ),
+            choices: ['space']
+        };
+
+        var face_fixation = {
+            type: "html-keyboard-response",
+            stimulus: "<div style='font-size:56px;'>+</div>",
+            choices: jsPsych.NO_KEYS,
+            trial_duration: 1000
+        };
+
+        var face_image_trial = {
+            type: "image-keyboard-response",
+            stimulus: jsPsych.timelineVariable('stimulus_image'),
+            choices: jsPsych.NO_KEYS,
+            trial_duration: 1000,
+            response_ends_trial: false,
+            data: {
+                task: "face_rating",
+                phase: jsPsych.timelineVariable('phase'),
+                stimulus_image: jsPsych.timelineVariable('stimulus_image'),
+                majority_rating: jsPsych.timelineVariable('majority_rating'),
+                condition: DEBUG_CONDITION
+            }
+        };
+
+        var face_rating_trial = {
+            type: "html-keyboard-response",
+            stimulus: function() {
+                return faceRatingHtml(jsPsych.timelineVariable('majority_rating', true));
+            },
+            choices: ['1','2','3','4','5','6','7','8','9'],
+            data: {
+                task: "face_rating",
+                phase: jsPsych.timelineVariable('phase'),
+                stimulus_image: jsPsych.timelineVariable('stimulus_image'),
+                majority_rating: jsPsych.timelineVariable('majority_rating'),
+                condition: DEBUG_CONDITION
+            },
+            on_finish: function(data) {
+                data.rating_key = data.key_press;
+            }
+        };
+
+        var face_practice_procedure = {
+            timeline: [face_fixation, face_image_trial, face_rating_trial],
+            timeline_variables: face_practice_trials,
+            randomize_order: false
+        };
+
+        var face_between_message = {
+            type: "html-keyboard-response",
+            stimulus: faceInstructionHtml(
+                "Тренировочная часть завершена.<br><br>" +
+                "Если вам всё ещё не совсем понятно, что нужно делать, пожалуйста, сообщите об этом экспериментатору.<br><br>" +
+                "Если всё понятно, пожалуйста, прочитайте следующее:<br><br>" +
+                "Работа, которую вы выполнили 5 минут назад, была оценена руководителем проекта.<br><br>" +
+                "Он(а) даст своё личное и честное мнение о выполненной вами работе.<br><br>" +
+                "Вам не нужно ничего делать с этим отзывом, кроме как внимательно его прочитать.<br><br>" +
+                "После того как вы его прочитаете, вы продолжите остальную часть эксперимента.<br><br>" +
+                "Если всё понятно и вы готовы прочитать отзыв, пожалуйста, нажмите ПРОБЕЛ."
+            ),
+            choices: ['space']
+        };
+
+        var face_main_procedure = {
+            timeline: [face_fixation, face_image_trial, face_rating_trial],
+            timeline_variables: face_main_trials,
+            randomize_order: false
+        };
+
+        var face_end_save = {
+            type: "call-function",
+            func: function() {
+                var textData = jsPsych.data.get().filter({trial_type: "survey-text"}).values();
+                var age = "";
+                var sex = "";
+                try {
+                    if (textData.length > 0 && textData[0].responses) {
+                        var firstForm = JSON.parse(textData[0].responses);
+                        age = firstForm.Q0 || "";
+                    }
+                } catch(e) {}
+
+                var genderData = jsPsych.data.get().filter({questionnaire_item: "gender"}).last(1).values();
+                if (genderData.length > 0) {
+                    sex = genderData[0].gender_label || "";
+                }
+
+                jsPsych.data.addProperties({
+                    participant_id: "P" + Date.now(),
+                    age: age,
+                    sex: sex,
+                    condition: DEBUG_CONDITION,
+                    skip_questionnaires: SKIP_QUESTIONNAIRES
+                });
+
+                jsPsych.data.write({
+                    trial_type: "ranking_result",
+                    ranking_1: ranked[0],
+                    ranking_2: ranked[1],
+                    ranking_3: ranked[2],
+                    ranking_4: ranked[3],
+                    ranking_5: ranked[4],
+                    ranking_6: ranked[5],
+                    ranking_7: ranked[6],
+                    ranking_8: ranked[7],
+                    ranking_9: ranked[8],
+                    selected_condition: DEBUG_CONDITION
+                });
+
+                var stamp = new Date().toISOString().replace(/[:.]/g, "-");
+                jsPsych.data.get().localSave("csv", "combined_experiment_" + stamp + ".csv");
+            }
+        };
+
+        var face_goodbye = {
+            type: "html-button-response",
+            stimulus:
+                "<div class='box'><h3>Спасибо!</h3>" +
+                "<p>Эксперимент завершён.</p>" +
+                "<p>Файл с данными был сохранён на это устройство.</p></div>",
+            choices: ["Завершить"]
+        };
+
+        var questionnaires_block = {
+            timeline: [
+                questionnaire_intro,
+                start_questionnaire,
+                start_questionnaire_gender,
+                start_questionnaire_likert,
+                school_needs_questionnaire,
+                reactance_questionnaire,
+                scm_intro,
+                scm_adults,
+                scm_french,
+                scm_teenagers,
+                scm_americans,
+                scm_italians,
+                deviant_activity_questionnaire
+            ],
+            conditional_function: function() {
+                return !SKIP_QUESTIONNAIRES;
+            }
+        };
+
+        var food_block = [
+            {
+                type: "html-button-response",
+                stimulus:
+                    "<div class='box'><h3>Инструкция. Часть 1. Ранжирование блюд</h3>" +
+                    "<p>В следующем задании вам будет предложено рассмотреть несколько блюд, которые потенциально могут быть добавлены в школьное меню.</p>" +
+                    "<p>Ваша задача - расположить 9 блюд в порядке предпочтения в зависимости от того, как часто вы хотели бы видеть каждое из этих блюд в школьном меню.</p>" +
+                    "<p>Расположите блюда так, чтобы на первом месте оказалось блюдо, которое вы больше всего хотели бы видеть в меню, а на последнем месте - блюдо, которое вы хотели бы видеть реже всего.</p>" +
+                    "<p>Ваши ответы будут использованы в системе голосования. Если некоторые блюда окажутся непопулярными среди большинства участников, они могут быть полностью исключены из школьного меню.</p>" +
+                    "<p>После того как вы завершите ранжирование, вам будет предложено подтвердить ваш выбор. Перед переходом к следующему этапу у вас будет возможность изменить порядок и заново расположить блюда, если вы захотите.</p>" +
+                    "<p>Когда вы будете довольны своим выбором, подтвердите ранжирование, чтобы продолжить задание.</p></div>",
+                choices: ["Продолжить"]
+            },
+            ranking_block,
+            {
+                type: "html-button-response",
+                stimulus:
+                    "<div class='box'><h3>Инструкция. Часть 2. Оценка того, насколько нравится блюдо</h3>" +
+                    "<p>На следующем этапе вам снова будут показаны те же блюда.</p>" +
+                    "<p>Теперь вам нужно оценить, насколько вам нравится каждое из этих блюд.</p>" +
+                    "<p>Оценка проводится по шкале от 1 до 5. 1 - совсем не нравится. 5 - очень нравится.</p>" +
+                    "<p>Пожалуйста, оценивайте каждое блюдо исходя из вашего личного мнения.</p></div>",
+                choices: ["Продолжить"]
+            },
+            personal_ratings[0], personal_ratings[1], personal_ratings[2],
+            personal_ratings[3], personal_ratings[4], personal_ratings[5],
+            personal_ratings[6], personal_ratings[7], personal_ratings[8],
+            statistics_screen,
+            {
+                type: "html-button-response",
+                stimulus:
+                    "<div class='box'><h3>Инструкция. Часть 3. Повторная оценка ожидаемого удовольствия</h3>" +
+                    "<p>На этом этапе вам снова будут показаны те же блюда.</p>" +
+                    "<p>Теперь вам нужно оценить, какое удовольствие вы ожидали бы получить, если бы съели каждое из этих блюд.</p>" +
+                    "<p>1 - совсем не получил(а) бы удовольствия. 5 - получил(а) бы большое удовольствие.</p>" +
+                    "<p>Пожалуйста, оценивайте каждое блюдо исходя из вашего личного ощущения.</p></div>",
+                choices: ["Продолжить"]
+            },
+            school_ratings[0], school_ratings[1], school_ratings[2],
+            school_ratings[3], school_ratings[4], school_ratings[5],
+            school_ratings[6], school_ratings[7], school_ratings[8]
+        ];
+
         // -
         // Run
         // -
 
-        Promise.all([
-            faceLoadWorkbookRows("practicepics.xlsx"),
-            faceLoadWorkbookRows("pics.xlsx")
-        ]).then(function(results) {
-            var facePractice = faceShuffle(buildFacePracticeTrials(results[0]));
-            var faceMain = faceShuffle(buildFaceMainTrials(results[1]));
-            var fullTimeline = timeline.concat(buildFaceSection(facePractice, faceMain));
-            jsPsych.init({
-                timeline: fullTimeline
-            });
-        }).catch(function(err) {
-            document.body.innerHTML =
-                "<div style='max-width:900px; margin:60px auto; font-family:Arial,sans-serif;'>" +
-                "<h2>Loading error</h2>" +
-                "<p>" + String(err.message) + "</p>" +
-                "<p>Put this HTML file, practicepics.xlsx, pics.xlsx, and your image files in the same folder, and run it through a local server.</p>" +
-                "</div>";
-            throw err;
+        var fullTimeline = [intro_screen, start_mode_screen, questionnaires_block]
+            .concat(food_block)
+            .concat([face_load_materials, face_fullscreen, face_intro, face_practice_procedure, face_between_message, face_main_procedure, face_end_save, face_goodbye]);
+
+        jsPsych.init({
+            timeline: fullTimeline
         });
+
     </script>
 </body>
 </html>
