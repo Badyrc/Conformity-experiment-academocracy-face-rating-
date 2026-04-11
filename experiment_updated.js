@@ -2,7 +2,6 @@
 (async function() {
   const RESPONSES_REQUIRED = false;
   const SUSPICION_SELECT_REQUIRED = false;
-  const WEB3FORMS_ACCESS_KEY = 'd5801e60-32a6-40aa-82b8-b546db2d91d6';
 
   const FEEDBACK_MESSAGES = [
     {
@@ -16,6 +15,7 @@
   ];
 
   let assignedFeedback = FEEDBACK_MESSAGES[Math.floor(Math.random() * FEEDBACK_MESSAGES.length)];
+  const WEB3FORMS_ACCESS_KEY = 'd5801e60-32a6-40aa-82b8-b546db2d91d6';
 
   const jsPsych = initJsPsych({
     show_progress_bar: false,
@@ -41,46 +41,34 @@
       </div>`;
   }
 
-  function downloadText(filename, text, mimeType) {
-    const blob = new Blob([text], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
 
-  async function sendCsvAttachment(stageLabel, participantId, csvText) {
+  async function sendStageDataToWeb3Forms(stageLabel) {
+    const allData = jsPsych.data.get();
+    const participantId = allData.values()[0]?.participant_id || '001';
+    const age = allData.values()[0]?.age || '';
+    const sex = allData.values()[0]?.sex || '';
+    const condition = allData.values()[0]?.upstream_condition || '';
+
     const formData = new FormData();
-    formData.append('access_key', WEB3FORMS_ACCESS_KEY);
-    formData.append('subject', `${stageLabel} data - ${participantId}`);
-    formData.append('from_name', 'Conformity Experiment');
-    formData.append('name', participantId);
-    formData.append('email', 'noreply@conformity.local');
-    formData.append('message', `${stageLabel} submission for participant ${participantId}. CSV file is attached.`);
-
-    const file = new File(
-      [csvText],
-      `${participantId}_${stageLabel}.csv`,
-      { type: 'text/csv' }
+    formData.append("access_key", WEB3FORMS_ACCESS_KEY);
+    formData.append("subject", `Conformity experiment ${stageLabel} - ${participantId}`);
+    formData.append("from_name", "Conformity Experiment");
+    formData.append(
+      "message",
+      `participant_id: ${participantId}\nstage: ${stageLabel}\ncondition: ${condition}\nage: ${age}\nsex: ${sex}\n\nDATA_START\n${allData.csv()}\nDATA_END`
     );
 
-    formData.append('attachment', file);
-
-    const response = await fetch('https://api.web3forms.com/submit', {
-      method: 'POST',
+    const response = await fetch("https://api.web3forms.com/submit", {
+      method: "POST",
       body: formData
     });
-
-    const data = await response.json();
-    if (!response.ok || !data.success) {
-      throw new Error(data.message || 'Web3Forms submission failed');
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.message || "Web3Forms submission failed");
     }
-    return data;
+    return result;
   }
+
 
   async function loadWorkbookRows(filename) {
     const response = await fetch(filename, { cache: 'no-store' });
@@ -578,26 +566,14 @@
   timeline.push({
     type: jsPsychCallFunction,
     async: true,
-    func: async function(done) {
-      const pid = jsPsych.data.get().values()[0]?.participant_id || '001';
-      const csv = jsPsych.data.get().csv();
-      try {
-        await sendCsvAttachment('stage2', pid, csv);
-        jsPsych.data.addProperties({
-          stage2_sent_to_web3forms: true
-        });
+    func: function(done) {
+      sendStageDataToWeb3Forms("stage2").then(function() {
         done();
-      } catch (err) {
+      }).catch(function(err) {
         console.error(err);
-        const shouldContinue = window.confirm('Не удалось автоматически отправить данные второй части. Нажмите OK, чтобы всё равно завершить исследование, или Отмена, чтобы попробовать ещё раз после проверки соединения.');
-        if (shouldContinue) {
-          jsPsych.data.addProperties({
-            stage2_sent_to_web3forms: false,
-            stage2_send_error: String(err && err.message ? err.message : err)
-          });
-          done();
-        }
-      }
+        alert("Не удалось отправить данные второй части. Пожалуйста, сообщите экспериментатору.");
+        done();
+      });
     },
     data: { phase: 'send_stage2_data' }
   });

@@ -223,9 +223,35 @@ function assignCondition() {
 }
 DEBUG_CONDITION = assignCondition();
 var RESPONSES_REQUIRED = false;
-var WEB3FORMS_ACCESS_KEY = 'd5801e60-32a6-40aa-82b8-b546db2d91d6';
 var STAGE1_PARTICIPANT_ID = '';
 var STAGE2_URL = '';
+var WEB3FORMS_ACCESS_KEY = 'd5801e60-32a6-40aa-82b8-b546db2d91d6';
+
+async function sendStageDataToWeb3Forms(stageLabel, participantId, dataString, meta) {
+    var formData = new FormData();
+    formData.append("access_key", WEB3FORMS_ACCESS_KEY);
+    formData.append("subject", "Conformity experiment " + stageLabel + " - " + participantId);
+    formData.append("from_name", "Conformity Experiment");
+    formData.append("message",
+        "participant_id: " + participantId + "\n" +
+        "stage: " + stageLabel + "\n" +
+        "condition: " + (meta.condition || "") + "\n" +
+        "age: " + (meta.age || "") + "\n" +
+        "sex: " + (meta.sex || "") + "\n\n" +
+        "DATA_START\n" + dataString + "\nDATA_END"
+    );
+
+    var response = await fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        body: formData
+    });
+    var result = await response.json();
+    if (!response.ok || !result.success) {
+        throw new Error(result.message || "Web3Forms submission failed");
+    }
+    return result;
+}
+
 
         // -
         // Render ranking UI
@@ -363,31 +389,6 @@ var STAGE2_URL = '';
 
                 jsPsych.finishTrial();
             };
-        }
-
-
-        async function sendCsvAttachment(stageLabel, participantId, csvText) {
-            var formData = new FormData();
-            formData.append('access_key', WEB3FORMS_ACCESS_KEY);
-            formData.append('subject', stageLabel + ' data - ' + participantId);
-            formData.append('from_name', 'Conformity Experiment');
-            formData.append('name', participantId);
-            formData.append('email', 'noreply@conformity.local');
-            formData.append('message', stageLabel + ' submission for participant ' + participantId + '. CSV file is attached.');
-
-            var file = new File([csvText], participantId + '_' + stageLabel + '.csv', { type: 'text/csv' });
-            formData.append('attachment', file);
-
-            var response = await fetch('https://api.web3forms.com/submit', {
-                method: 'POST',
-                body: formData
-            });
-
-            var data = await response.json();
-            if (!response.ok || !data.success) {
-                throw new Error(data.message || 'Web3Forms submission failed');
-            }
-            return data;
         }
 
         // -
@@ -736,17 +737,17 @@ var auto_condition_trial = {
             }
         };
 
-
-                var school_needs_questionnaire = {
+                
+var school_needs_questionnaire = {
             type: "survey-likert",
             preamble:
                 "<h3>Опросник</h3>" +
                 "<p><b>Инструкция</b></p>" +
-                "<p>Вам предложены 21 утверждение. Ваша задача – внимательно ознакомиться с материалом, выбрать степень согласия с каждым из предложенных высказываний.</p>" +
+                "<p>Вам предложен 21 утверждение. Ваша задача – внимательно ознакомиться с материалом, выбрать степень согласия с каждым из предложенных высказываний.</p>" +
                 "<p>Руководствуйтесь следующей шкалой:</p>" +
-                "<p>1–2 – полностью не согласен<br>3 – скорее не согласен<br>4 – затрудняюсь ответить<br>5 – в целом согласен<br>6–7 – полностью согласен</p>" +
-                "<p>Старайтесь выбирать тот ответ, который первым пришёл в голову. И помните, что нет «правильных» и «неправильных» ответов.</p>" +
-                "<p><b>Тестовый материал к опроснику удовлетворения базовых психологических потребностей</b></p>",
+                "<p>1 – 2 – полностью не согласен<br>3 – скорее не согласен<br>4 – затрудняюсь ответить<br>5 – в целом согласен<br>6 – 7 – полностью согласен</p>" +
+                "<p>Старайтесь выбирать тот ответ, который первым пришел в голову. И помните, что нет «правильных» и неправильных ответов.</p>" +
+                "<p><b>Тестовый материал опроснику Удовлетворение базовых психологических потребностей</b></p>",
             questions: [
                 { prompt: "1. Я чувствую, что имею полную свободу в выборе жизненного пути", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
                 { prompt: "2. Мне действительно нравятся люди, с которыми я взаимодействую", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
@@ -754,7 +755,7 @@ var auto_condition_trial = {
                 { prompt: "4. Я чувствую, что жизнь тяготит меня", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
                 { prompt: "5. Люди, которые меня окружают, говорят, что я – мастер своего дела", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
                 { prompt: "6. Я чувствую себя одиноким, даже когда вступаю в контакт с людьми", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
-                { prompt: "7. В основном я предоставлен сам себе и имею ограниченное число социальных контактов", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
+                { prompt: "7. В основном я представляю сам себя и имею ограниченное число социальных контактов", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
                 { prompt: "8. Я чувствую себя свободным в выражении своих идей и мнений", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
                 { prompt: "9. Я рассматриваю людей, которые меня окружают, как своих друзей", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
                 { prompt: "10. Я способен получать новые интересные навыки", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
@@ -771,34 +772,62 @@ var auto_condition_trial = {
                 { prompt: "21. Люди обычно приветливы со мной", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED }
             ],
             button_label: "Продолжить",
-            data: { questionnaire_section: "Basic Needs Satisfaction" },
+            data: { questionnaire_section: "Basic Psychological Need Satisfaction 21" },
             on_finish: function(data) {
                 try {
                     var responses = JSON.parse(data.responses);
-
-                    function getVal(i) {
+                    function value(i) {
                         return (responses["Q" + i] || 0) + 1;
                     }
-                    function rev(v) {
-                        return 8 - v;
+                    function rev(x) {
+                        return 8 - x;
                     }
                     function mean(arr) {
                         return arr.reduce(function(a, b) { return a + b; }, 0) / arr.length;
                     }
 
-                    var autonomy_values = [getVal(0), rev(getVal(3)), getVal(7), getVal(10), getVal(13), getVal(16), rev(getVal(19))];
-                    var competence_values = [rev(getVal(2)), getVal(4), getVal(9), getVal(12), rev(getVal(14)), rev(getVal(18))];
-                    var relatedness_values = [getVal(1), rev(getVal(5)), rev(getVal(6)), getVal(8), getVal(11), rev(getVal(15)), rev(getVal(17)), getVal(20)];
+                    var autonomy = [
+                        value(0),
+                        rev(value(3)),
+                        value(7),
+                        value(10),
+                        value(13),
+                        value(16),
+                        rev(value(19))
+                    ];
+                    var competence = [
+                        rev(value(2)),
+                        value(4),
+                        value(9),
+                        value(12),
+                        rev(value(14)),
+                        rev(value(18))
+                    ];
+                    var relatedness = [
+                        value(1),
+                        rev(value(5)),
+                        rev(value(6)),
+                        value(8),
+                        value(11),
+                        rev(value(15)),
+                        rev(value(17)),
+                        value(20)
+                    ];
 
-                    data.basic_needs_autonomy_mean = mean(autonomy_values);
-                    data.basic_needs_competence_mean = mean(competence_values);
-                    data.basic_needs_relatedness_mean = mean(relatedness_values);
-                    data.basic_needs_total_mean = mean(autonomy_values.concat(competence_values, relatedness_values));
+                    data.bpns21_autonomy_mean = mean(autonomy);
+                    data.bpns21_competence_mean = mean(competence);
+                    data.bpns21_relatedness_mean = mean(relatedness);
+
+                    var all_values = [];
+                    for (var i = 0; i < 21; i++) {
+                        all_values.push(value(i));
+                    }
+                    data.bpns21_total_raw_mean = mean(all_values);
                 } catch (e) {}
             }
         };
 
-        var reactance_questionnaire = {
+var reactance_questionnaire = {
             type: "survey-likert",
             preamble:
                 "<h3>Опросник</h3>" +
@@ -971,10 +1000,11 @@ var auto_condition_trial = {
             data: { questionnaire_section: "paraphrase_task" }
         };
 
-
-        var finalize_stage1 = {
+        
+var finalize_stage1 = {
             type: "call-function",
-            func: function () {
+            async: true,
+            func: function (done) {
                 var textTrials = jsPsych.data.get().filter({trial_type: 'survey-text'}).values();
                 var demoTrial = textTrials.find(function(t) {
                     return t.responses && typeof t.responses === 'string' && t.responses.indexOf('"Q0"') !== -1;
@@ -1005,62 +1035,31 @@ var auto_condition_trial = {
                     selected_condition_label: CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION
                 });
 
-                var age = encodeURIComponent(demoResponses.Q0 || '');
-                var sex = encodeURIComponent(genderTrial.gender_label || '');
+                var ageRaw = demoResponses.Q0 || '';
+                var sexRaw = genderTrial.gender_label || '';
                 STAGE2_URL = 'index_combined.html?participant_id=' + encodeURIComponent(STAGE1_PARTICIPANT_ID)
-                    + '&age=' + age
-                    + '&sex=' + sex
+                    + '&age=' + encodeURIComponent(ageRaw)
+                    + '&sex=' + encodeURIComponent(sexRaw)
                     + '&c=' + encodeURIComponent(CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION);
-            }
-        };
 
-        var send_stage1_data = {
-            type: "html-button-response",
-            stimulus:
-                "<div class='box'>" +
-                "<h3>Первая часть завершена</h3>" +
-                "<p>Пожалуйста, подождите. Выполняется автоматическая отправка данных первой части.</p>" +
-                "<p id='stage1SendStatus'>Отправка...</p>" +
-                "</div>",
-            choices: [],
-            on_load: async function () {
-                var statusEl = document.getElementById('stage1SendStatus');
-                try {
-                    var csv = jsPsych.data.get().csv();
-                    await sendCsvAttachment('stage1', STAGE1_PARTICIPANT_ID, csv);
-                    statusEl.textContent = 'Данные успешно отправлены. Переход ко второй части...';
-                    setTimeout(function() {
-                        window.location.href = STAGE2_URL;
-                    }, 800);
-                } catch (err) {
-                    console.error(err);
-                    statusEl.textContent = 'Не удалось автоматически отправить данные. Проверьте подключение к интернету.';
-                    var retryBtn = document.createElement('button');
-                    retryBtn.textContent = 'Повторить отправку';
-                    retryBtn.style.marginTop = '14px';
-                    retryBtn.onclick = async function() {
-                        retryBtn.disabled = true;
-                        statusEl.textContent = 'Повторная отправка...';
-                        try {
-                            var csvRetry = jsPsych.data.get().csv();
-                            await sendCsvAttachment('stage1', STAGE1_PARTICIPANT_ID, csvRetry);
-                            statusEl.textContent = 'Данные успешно отправлены. Переход ко второй части...';
-                            setTimeout(function() {
-                                window.location.href = STAGE2_URL;
-                            }, 800);
-                        } catch (error2) {
-                            console.error(error2);
-                            retryBtn.disabled = false;
-                            statusEl.textContent = 'Снова не удалось отправить данные. Можно попробовать ещё раз.';
-                        }
-                    };
-                    document.querySelector('.box').appendChild(retryBtn);
-                }
-            }
-        };
-                continueBtn.onclick = function() {
+                sendStageDataToWeb3Forms(
+                    "stage1",
+                    STAGE1_PARTICIPANT_ID,
+                    jsPsych.data.get().csv(),
+                    {
+                        condition: CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION,
+                        age: ageRaw,
+                        sex: sexRaw
+                    }
+                ).then(function() {
                     window.location.href = STAGE2_URL;
-                };
+                }).catch(function(err) {
+                    console.error(err);
+                    alert("Не удалось отправить данные первой части. Пожалуйста, сообщите экспериментатору.");
+                    window.location.href = STAGE2_URL;
+                }).finally(function() {
+                    done();
+                });
             }
         };
 
@@ -1143,8 +1142,7 @@ var auto_condition_trial = {
 
             paraphrase_intro,
             paraphrase_task,
-            finalize_stage1,
-            send_stage1_data
+            finalize_stage1
         ];
 
         // -
