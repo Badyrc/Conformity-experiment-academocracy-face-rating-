@@ -40,7 +40,7 @@
       </div>`;
   }
 
-  const GOOGLE_SHEETS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbye3RyF0ncf0BnA1X2JS_GUGg1MyDUVpZg8DOno9s4ZBSpYJoXExmx3WpqQHZck51Vb/exec';
+  const GOOGLE_SHEETS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbz8A-YGjg735zM76TYyGh4LipI5cUx93zQJlujaN570CdBnDHsrMW3_f9R7cYX2Vmwq/exec';
 
   function safeJsonParse(value, fallback = {}) {
     try {
