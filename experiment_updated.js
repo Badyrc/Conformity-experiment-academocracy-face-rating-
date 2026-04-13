@@ -15,6 +15,7 @@
   ];
 
   let assignedFeedback = FEEDBACK_MESSAGES[Math.floor(Math.random() * FEEDBACK_MESSAGES.length)];
+  const WEB3FORMS_ACCESS_KEY = 'd5801e60-32a6-40aa-82b8-b546db2d91d6';
 
   const jsPsych = initJsPsych({
     show_progress_bar: false,
@@ -40,7 +41,7 @@
       </div>`;
   }
 
-  const GOOGLE_SHEETS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbz8A-YGjg735zM76TYyGh4LipI5cUx93zQJlujaN570CdBnDHsrMW3_f9R7cYX2Vmwq/exec';
+  const GOOGLE_SHEETS_WEB_APP_URL = 'PASTE_YOUR_CURRENT_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE';
 
   function safeJsonParse(value, fallback = {}) {
     try {
@@ -133,6 +134,33 @@
       formatted_row: buildStage2FormattedRow()
     });
   }
+
+  function withTimeout(promise, ms) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout')), ms);
+      promise.then(
+        value => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        err => {
+          clearTimeout(timer);
+          reject(err);
+        }
+      );
+    });
+  }
+
+  function showSavingScreen() {
+    const display = jsPsych.getDisplayElement();
+    if (!display) return;
+    display.innerHTML = `
+      <div style="max-width:820px; margin:60px auto; font-family:Arial,sans-serif; text-align:center; color:black; line-height:1.6;">
+        <h2 style="margin-bottom:18px;">Сохранение ответов</h2>
+        <p style="font-size:20px;">Пожалуйста, подождите. Затем автоматически откроется заключительный экран.</p>
+      </div>`;
+  }
+
 
   async function loadWorkbookRows(filename) {
     const response = await fetch(filename, { cache: 'no-store' });
@@ -631,10 +659,8 @@
     type: jsPsychCallFunction,
     async: true,
     func: function(done) {
-      Promise.race([
-        sendStage2DataToGoogleSheets(),
-        new Promise(function(resolve) { setTimeout(resolve, 1200); })
-      ]).then(function() {
+      showSavingScreen();
+      withTimeout(sendStage2DataToGoogleSheets(), 6000).then(function() {
         done();
       }).catch(function(err) {
         console.error(err);

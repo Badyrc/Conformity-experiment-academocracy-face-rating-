@@ -225,154 +225,31 @@ DEBUG_CONDITION = assignCondition();
 var RESPONSES_REQUIRED = false;
 var STAGE1_PARTICIPANT_ID = '';
 var STAGE2_URL = '';
+var WEB3FORMS_ACCESS_KEY = 'd5801e60-32a6-40aa-82b8-b546db2d91d6';
 
-var GOOGLE_SHEETS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbz8A-YGjg735zM76TYyGh4LipI5cUx93zQJlujaN570CdBnDHsrMW3_f9R7cYX2Vmwq/exec';
+async function sendStageDataToWeb3Forms(stageLabel, participantId, dataString, meta) {
+    var formData = new FormData();
+    formData.append("access_key", WEB3FORMS_ACCESS_KEY);
+    formData.append("subject", "Conformity experiment " + stageLabel + " - " + participantId);
+    formData.append("from_name", "Conformity Experiment");
+    formData.append("message",
+        "participant_id: " + participantId + "\n" +
+        "stage: " + stageLabel + "\n" +
+        "condition: " + (meta.condition || "") + "\n" +
+        "age: " + (meta.age || "") + "\n" +
+        "sex: " + (meta.sex || "") + "\n\n" +
+        "DATA_START\n" + dataString + "\nDATA_END"
+    );
 
-function safeJsonParse(value, fallback) {
-    try {
-        return typeof value === 'string' ? JSON.parse(value) : (value || fallback);
-    } catch (e) {
-        return fallback;
-    }
-}
-
-function postPayloadToGoogleSheets(payload) {
-    var body = JSON.stringify(payload);
-
-    try {
-        if (navigator.sendBeacon) {
-            var blob = new Blob([body], { type: 'text/plain;charset=UTF-8' });
-            var beaconSent = navigator.sendBeacon(GOOGLE_SHEETS_WEB_APP_URL, blob);
-            if (beaconSent) {
-                return Promise.resolve({ sent: true, transport: 'beacon' });
-            }
-        }
-    } catch (e) {}
-
-    return fetch(GOOGLE_SHEETS_WEB_APP_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-        body: body,
-        keepalive: true,
-        credentials: 'omit'
-    }).then(function() {
-        return { sent: true, transport: 'fetch' };
+    var response = await fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        body: formData
     });
-}
-
-function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
-    var allTrials = jsPsych.data.get().values();
-    var row = {
-        participant_id: participantId,
-        stage: 'stage1',
-        selected_condition: DEBUG_CONDITION,
-        selected_condition_label: CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION,
-        age: ageRaw || '',
-        sex: sexRaw || ''
-    };
-
-    for (var i = 0; i < allTrials.length; i++) {
-        var trial = allTrials[i];
-
-        if (trial.trial_type === 'ranking_result') {
-            for (var r = 1; r <= 9; r++) {
-                row['ranking_' + r] = trial['ranking_' + r] || '';
-            }
-        }
-
-        if (trial.trial_type === 'survey-text') {
-            var textResp = safeJsonParse(trial.responses, {});
-            if (trial.questionnaire_section === 'paraphrase_task') {
-                row.paraphrase_1 = textResp.Q0 || '';
-                row.paraphrase_2 = textResp.Q1 || '';
-                row.paraphrase_3 = textResp.Q2 || '';
-            } else if (!row.age && textResp.Q0 !== undefined) {
-                row.age = textResp.Q0 || '';
-                row.class_or_course = textResp.Q1 || '';
-                row.city = textResp.Q2 || '';
-            }
-        }
-
-        if (trial.questionnaire_item === 'gender') {
-            row.sex = trial.gender_label || trial.gender_code || row.sex || '';
-            row.gender_code = trial.gender_code || '';
-        }
-
-        if (trial.trial_type === 'survey-likert') {
-            var likertResp = safeJsonParse(trial.responses, safeJsonParse(trial.response, {}));
-
-            if (trial.questionnaire_section === 'PAKR') {
-                for (var p = 0; p < 24; p++) {
-                    row['pakr_q' + (p + 1)] = likertResp['Q' + p] !== undefined ? Number(likertResp['Q' + p]) + 1 : '';
-                }
-                row.pakr_autonomy_mean = trial.pakr_autonomy_mean || '';
-                row.pakr_control_mean = trial.pakr_control_mean || '';
-                row.pakr_total_mean = trial.pakr_total_mean || '';
-            }
-
-            if (trial.questionnaire_section === 'Basic Psychological Need Satisfaction 21') {
-                for (var b = 0; b < 21; b++) {
-                    row['bpns21_q' + (b + 1)] = likertResp['Q' + b] !== undefined ? Number(likertResp['Q' + b]) + 1 : '';
-                }
-                row.bpns21_autonomy_mean = trial.bpns21_autonomy_mean || '';
-                row.bpns21_competence_mean = trial.bpns21_competence_mean || '';
-                row.bpns21_relatedness_mean = trial.bpns21_relatedness_mean || '';
-                row.bpns21_total_raw_mean = trial.bpns21_total_raw_mean || '';
-            }
-
-            if (trial.questionnaire_section === 'Hong Reactance Scale') {
-                for (var h = 0; h < 14; h++) {
-                    row['reactance_q' + (h + 1)] = likertResp['Q' + h] !== undefined ? Number(likertResp['Q' + h]) + 1 : '';
-                }
-                row.reactance_norm_mean = trial.reactance_norm_mean || '';
-                row.reactance_independence_mean = trial.reactance_independence_mean || '';
-                row.reactance_resistance_mean = trial.reactance_resistance_mean || '';
-                row.reactance_emotional_mean = trial.reactance_emotional_mean || '';
-                row.reactance_total_mean = trial.reactance_total_mean || '';
-            }
-
-            if (trial.questionnaire_section === 'Sharov Deviant Activity') {
-                for (var d = 0; d < 28; d++) {
-                    row['deviant_q' + (d + 1)] = likertResp['Q' + d] !== undefined ? Number(likertResp['Q' + d]) + 1 : '';
-                }
-            }
-
-            if (trial.questionnaire_section === 'SCM' && trial.scm_group) {
-                for (var s = 0; s < 6; s++) {
-                    row['scm_' + trial.scm_group + '_q' + (s + 1)] = likertResp['Q' + s] !== undefined ? Number(likertResp['Q' + s]) + 1 : '';
-                }
-                row['scm_' + trial.scm_group + '_warmth_mean'] = trial.scm_warmth_mean || trial['scm_' + trial.scm_group + '_warmth_mean'] || '';
-                row['scm_' + trial.scm_group + '_competence_mean'] = trial.scm_competence_mean || trial['scm_' + trial.scm_group + '_competence_mean'] || '';
-            }
-
-            if (trial.rating_type === 'personal_liking' && trial.dish_index !== undefined) {
-                row['personal_liking_' + (Number(trial.dish_index) + 1)] = likertResp.Q0 !== undefined ? Number(likertResp.Q0) + 1 : '';
-                row['personal_liking_' + (Number(trial.dish_index) + 1) + '_dish'] = trial.dish || '';
-            }
-
-            if (trial.rating_type === 'expected_pleasure' && trial.dish_index !== undefined) {
-                row['expected_pleasure_' + (Number(trial.dish_index) + 1)] = likertResp.Q0 !== undefined ? Number(likertResp.Q0) + 1 : '';
-                row['expected_pleasure_' + (Number(trial.dish_index) + 1) + '_dish'] = trial.dish || '';
-            }
-        }
+    var result = await response.json();
+    if (!response.ok || !result.success) {
+        throw new Error(result.message || "Web3Forms submission failed");
     }
-
-    return row;
-}
-
-function sendStage1DataToGoogleSheets(participantId, ageRaw, sexRaw) {
-    var rawRows = jsPsych.data.get().values();
-    var formattedRow = buildStage1FormattedRow(participantId, ageRaw, sexRaw);
-    return postPayloadToGoogleSheets({
-        stage: 'stage1',
-        participant_id: participantId,
-        age: ageRaw || '',
-        sex: sexRaw || '',
-        condition: CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION,
-        raw_rows: rawRows,
-        formatted_row: formattedRow
-    });
+    return result;
 }
 
 
@@ -1165,13 +1042,20 @@ var finalize_stage1 = {
                     + '&sex=' + encodeURIComponent(sexRaw)
                     + '&c=' + encodeURIComponent(CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION);
 
-                Promise.race([
-                    sendStage1DataToGoogleSheets(STAGE1_PARTICIPANT_ID, ageRaw, sexRaw),
-                    new Promise(function(resolve) { setTimeout(resolve, 1200); })
-                ]).then(function() {
+                sendStageDataToWeb3Forms(
+                    "stage1",
+                    STAGE1_PARTICIPANT_ID,
+                    jsPsych.data.get().csv(),
+                    {
+                        condition: CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION,
+                        age: ageRaw,
+                        sex: sexRaw
+                    }
+                ).then(function() {
                     window.location.href = STAGE2_URL;
                 }).catch(function(err) {
                     console.error(err);
+                    alert("Не удалось отправить данные первой части. Пожалуйста, сообщите экспериментатору.");
                     window.location.href = STAGE2_URL;
                 }).finally(function() {
                     done();
