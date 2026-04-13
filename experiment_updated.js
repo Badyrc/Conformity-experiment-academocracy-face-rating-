@@ -15,32 +15,8 @@
   ];
 
   let assignedFeedback = FEEDBACK_MESSAGES[Math.floor(Math.random() * FEEDBACK_MESSAGES.length)];
-
+  
   const GOOGLE_SHEETS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbz8A-YGjg735zM76TYyGh4LipI5cUx93zQJlujaN570CdBnDHsrMW3_f9R7cYX2Vmwq/exec';
-
-  const jsPsych = initJsPsych({
-    show_progress_bar: false,
-    auto_update_progress_bar: false
-  });
-
-  function getUrlParams() {
-    const params = new URLSearchParams(window.location.search);
-    return {
-      participant_id: params.get('participant_id') || '',
-      age: params.get('age') || '',
-      sex: params.get('sex') || '',
-      condition: params.get('c') || params.get('condition') || ''
-    };
-  }
-
-  const incoming = getUrlParams();
-
-  function instructionBlock(text) {
-    return `
-      <div style="max-width:880px; margin:0 auto; font-family:Arial,sans-serif; color:black; text-align:left; line-height:1.6; font-size:20px;">
-        ${text}
-      </div>`;
-  }
 
   function safeJsonParse(value, fallback = {}) {
     try {
@@ -56,8 +32,8 @@
     try {
       if (navigator.sendBeacon) {
         const blob = new Blob([body], { type: 'text/plain;charset=UTF-8' });
-        const beaconSent = navigator.sendBeacon(GOOGLE_SHEETS_WEB_APP_URL, blob);
-        if (beaconSent) {
+        const sent = navigator.sendBeacon(GOOGLE_SHEETS_WEB_APP_URL, blob);
+        if (sent) {
           return Promise.resolve({ sent: true, transport: 'beacon' });
         }
       }
@@ -69,8 +45,13 @@
       headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
       body,
       keepalive: true,
-      credentials: 'omit'
-    }).then(() => ({ sent: true, transport: 'fetch' }));
+      credentials: 'omit',
+      cache: 'no-store'
+    }).then(function() {
+      return { sent: true, transport: 'fetch' };
+    }).catch(function() {
+      return { sent: false, transport: 'fetch_failed' };
+    });
   }
 
   function buildStage2FormattedRow() {
@@ -133,7 +114,6 @@
       formatted_row: buildStage2FormattedRow()
     });
   }
-
 
   async function loadWorkbookRows(filename) {
     const response = await fetch(filename, { cache: 'no-store' });
@@ -629,14 +609,47 @@
 
 
   timeline.push({
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: `
+      <div style="max-width:760px; margin:80px auto; font-family:Arial,sans-serif; color:black; text-align:center; line-height:1.6;">
+        <h2 style="margin-bottom:16px;">Сохранение ответов</h2>
+        <p>Пожалуйста, подождите несколько секунд. Ваши ответы сохраняются.</p>
+      </div>
+    `,
+    choices: "NO_KEYS",
+    trial_duration: 800,
+    data: { phase: 'saving_stage2_screen' }
+  });
+
+  timeline.push({
     type: jsPsychCallFunction,
     async: true,
     func: function(done) {
-      sendStage2DataToGoogleSheets().then(function() {
+      Promise.race([
+        sendStage2DataToGoogleSheets(),
+        new Promise(function(resolve) {{
+          setTimeout(function() {{
+            resolve({ sent: false, transport: 'timeout' });
+          }}, 1800);
+        }})
+      ]).then(function(result) {
+        try {
+          jsPsych.data.write({
+            phase: 'send_stage2_data',
+            send_stage2_transport: result && result.transport ? result.transport : '',
+            send_stage2_sent: result && typeof result.sent !== 'undefined' ? result.sent : ''
+          });
+        } catch (e) {}
         done();
       }).catch(function(err) {
         console.error(err);
-        alert("Не удалось отправить данные второй части. Пожалуйста, сообщите экспериментатору.");
+        try {
+          jsPsych.data.write({
+            phase: 'send_stage2_data',
+            send_stage2_transport: 'error',
+            send_stage2_sent: false
+          });
+        } catch (e) {}
         done();
       });
     },
