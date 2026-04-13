@@ -9,6 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/jspsych@6.3.1/plugins/jspsych-survey-likert.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspsych@6.3.1/plugins/jspsych-survey-text.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspsych@6.3.1/plugins/jspsych-call-function.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jspsych@6.3.1/css/jspsych.css">
 
@@ -225,10 +226,36 @@ DEBUG_CONDITION = assignCondition();
 var RESPONSES_REQUIRED = false;
 var STAGE1_PARTICIPANT_ID = '';
 var STAGE2_URL = '';
+var WEB3FORMS_ACCESS_KEY = 'd5801e60-32a6-40aa-82b8-b546db2d91d6';
 
-        
-function downloadText(filename, text, mimeType) {
-    var blob = new Blob([text], { type: mimeType || 'text/csv;charset=utf-8;' });
+async function sendStageDataToWeb3Forms(stageLabel, participantId, dataString, meta) {
+    var formData = new FormData();
+    formData.append("access_key", WEB3FORMS_ACCESS_KEY);
+    formData.append("subject", "Conformity experiment " + stageLabel + " - " + participantId);
+    formData.append("from_name", "Conformity Experiment");
+    formData.append("message",
+        "participant_id: " + participantId + "\n" +
+        "stage: " + stageLabel + "\n" +
+        "condition: " + (meta.condition || "") + "\n" +
+        "age: " + (meta.age || "") + "\n" +
+        "sex: " + (meta.sex || "") + "\n\n" +
+        "DATA_START\n" + dataString + "\nDATA_END"
+    );
+
+    var response = await fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        body: formData
+    });
+    var result = await response.json();
+    if (!response.ok || !result.success) {
+        throw new Error(result.message || "Web3Forms submission failed");
+    }
+    return result;
+}
+
+
+
+function downloadBlob(filename, blob) {
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
@@ -236,13 +263,7 @@ function downloadText(filename, text, mimeType) {
     document.body.appendChild(a);
     a.click();
     a.remove();
-    setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
-}
-
-function parseResponsesSafe(responses) {
-    if (!responses) return {};
-    if (typeof responses === 'object') return responses;
-    try { return JSON.parse(responses); } catch (e) { return {}; }
+    setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
 }
 
 function toCSVFromRows(rows) {
@@ -253,17 +274,29 @@ function toCSVFromRows(rows) {
             if (headers.indexOf(key) === -1) headers.push(key);
         });
     });
+
     function esc(value) {
         if (value === undefined || value === null) return '';
         var s = String(value);
         if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
         return s;
     }
+
     var lines = [headers.join(',')];
     rows.forEach(function(row) {
         lines.push(headers.map(function(h) { return esc(row[h]); }).join(','));
     });
     return lines.join('\n');
+}
+
+function parseResponsesSafe(responses) {
+    if (!responses) return {};
+    if (typeof responses === 'object') return responses;
+    try {
+        return JSON.parse(responses);
+    } catch (e) {
+        return {};
+    }
 }
 
 function addResponseColumns(target, prefix, responsesObj) {
@@ -297,7 +330,6 @@ function buildStage1FormattedRow() {
     addResponseColumns(row, 'pakr', parseResponsesSafe(pakr && pakr.responses));
 
     var schoolNeeds = jsPsych.data.get().filter({ questionnaire_section: 'Basic Psychological Need Satisfaction 21' }).values()[0];
-    if (!schoolNeeds) schoolNeeds = jsPsych.data.get().filter({ questionnaire_section: 'Basic needs at school 21-item' }).values()[0];
     addResponseColumns(row, 'bpns21', parseResponsesSafe(schoolNeeds && schoolNeeds.responses));
 
     var reactance = jsPsych.data.get().filter({ questionnaire_section: 'Hong Reactance Scale' }).values()[0];
@@ -329,6 +361,14 @@ function buildStage1FormattedRow() {
     addResponseColumns(row, 'paraphrase', parseResponsesSafe(paraphrase && paraphrase.responses));
 
     return row;
+}
+
+async function downloadStage1Zip(participantId) {
+    var zip = new JSZip();
+    zip.file(participantId + "_stage1_raw.csv", jsPsych.data.get().csv());
+    zip.file(participantId + "_stage1_formatted.csv", toCSVFromRows([buildStage1FormattedRow()]));
+    var blob = await zip.generateAsync({type: "blob"});
+    downloadBlob(participantId + "_stage1_exports.zip", blob);
 }
 
 
@@ -1080,10 +1120,10 @@ var reactance_questionnaire = {
         };
 
         
-
 var finalize_stage1 = {
             type: "call-function",
-            func: function () {
+            async: true,
+            func: async function (done) {
                 var textTrials = jsPsych.data.get().filter({trial_type: 'survey-text'}).values();
                 var demoTrial = textTrials.find(function(t) {
                     return t.responses && typeof t.responses === 'string' && t.responses.indexOf('"Q0"') !== -1;
@@ -1114,13 +1154,6 @@ var finalize_stage1 = {
                     selected_condition_label: CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION
                 });
 
-                var rawCsv = jsPsych.data.get().csv();
-                var formattedCsv = toCSVFromRows([buildStage1FormattedRow()]);
-                downloadText(STAGE1_PARTICIPANT_ID + "_stage1_raw.csv", rawCsv, 'text/csv;charset=utf-8;');
-                setTimeout(function() {
-                    downloadText(STAGE1_PARTICIPANT_ID + "_stage1_formatted.csv", formattedCsv, 'text/csv;charset=utf-8;');
-                }, 300);
-
                 var ageRaw = demoResponses.Q0 || '';
                 var sexRaw = genderTrial.gender_label || '';
                 STAGE2_URL = 'index_combined.html?participant_id=' + encodeURIComponent(STAGE1_PARTICIPANT_ID)
@@ -1128,12 +1161,19 @@ var finalize_stage1 = {
                     + '&sex=' + encodeURIComponent(sexRaw)
                     + '&c=' + encodeURIComponent(CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION);
 
+                try {
+                    await downloadStage1Zip(STAGE1_PARTICIPANT_ID);
+                } catch (err) {
+                    console.error(err);
+                    alert("Не удалось подготовить файлы первой части.");
+                }
+
                 setTimeout(function() {
                     window.location.href = STAGE2_URL;
+                    done();
                 }, 900);
             }
         };
-
 
 // -
         // Timeline
