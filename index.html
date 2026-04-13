@@ -226,7 +226,7 @@ var RESPONSES_REQUIRED = false;
 var STAGE1_PARTICIPANT_ID = '';
 var STAGE2_URL = '';
 
-
+        
 function downloadText(filename, text, mimeType) {
     var blob = new Blob([text], { type: mimeType || 'text/csv;charset=utf-8;' });
     var url = URL.createObjectURL(blob);
@@ -239,6 +239,12 @@ function downloadText(filename, text, mimeType) {
     setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
 }
 
+function parseResponsesSafe(responses) {
+    if (!responses) return {};
+    if (typeof responses === 'object') return responses;
+    try { return JSON.parse(responses); } catch (e) { return {}; }
+}
+
 function toCSVFromRows(rows) {
     if (!rows || !rows.length) return '';
     var headers = [];
@@ -247,29 +253,17 @@ function toCSVFromRows(rows) {
             if (headers.indexOf(key) === -1) headers.push(key);
         });
     });
-
     function esc(value) {
         if (value === undefined || value === null) return '';
         var s = String(value);
         if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
         return s;
     }
-
     var lines = [headers.join(',')];
     rows.forEach(function(row) {
         lines.push(headers.map(function(h) { return esc(row[h]); }).join(','));
     });
     return lines.join('\n');
-}
-
-function parseResponsesSafe(responses) {
-    if (!responses) return {};
-    if (typeof responses === 'object') return responses;
-    try {
-        return JSON.parse(responses);
-    } catch (e) {
-        return {};
-    }
 }
 
 function addResponseColumns(target, prefix, responsesObj) {
@@ -303,6 +297,7 @@ function buildStage1FormattedRow() {
     addResponseColumns(row, 'pakr', parseResponsesSafe(pakr && pakr.responses));
 
     var schoolNeeds = jsPsych.data.get().filter({ questionnaire_section: 'Basic Psychological Need Satisfaction 21' }).values()[0];
+    if (!schoolNeeds) schoolNeeds = jsPsych.data.get().filter({ questionnaire_section: 'Basic needs at school 21-item' }).values()[0];
     addResponseColumns(row, 'bpns21', parseResponsesSafe(schoolNeeds && schoolNeeds.responses));
 
     var reactance = jsPsych.data.get().filter({ questionnaire_section: 'Hong Reactance Scale' }).values()[0];
@@ -1085,10 +1080,10 @@ var reactance_questionnaire = {
         };
 
         
+
 var finalize_stage1 = {
             type: "call-function",
-            async: true,
-            func: function (done) {
+            func: function () {
                 var textTrials = jsPsych.data.get().filter({trial_type: 'survey-text'}).values();
                 var demoTrial = textTrials.find(function(t) {
                     return t.responses && typeof t.responses === 'string' && t.responses.indexOf('"Q0"') !== -1;
@@ -1119,6 +1114,13 @@ var finalize_stage1 = {
                     selected_condition_label: CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION
                 });
 
+                var rawCsv = jsPsych.data.get().csv();
+                var formattedCsv = toCSVFromRows([buildStage1FormattedRow()]);
+                downloadText(STAGE1_PARTICIPANT_ID + "_stage1_raw.csv", rawCsv, 'text/csv;charset=utf-8;');
+                setTimeout(function() {
+                    downloadText(STAGE1_PARTICIPANT_ID + "_stage1_formatted.csv", formattedCsv, 'text/csv;charset=utf-8;');
+                }, 300);
+
                 var ageRaw = demoResponses.Q0 || '';
                 var sexRaw = genderTrial.gender_label || '';
                 STAGE2_URL = 'index_combined.html?participant_id=' + encodeURIComponent(STAGE1_PARTICIPANT_ID)
@@ -1126,26 +1128,12 @@ var finalize_stage1 = {
                     + '&sex=' + encodeURIComponent(sexRaw)
                     + '&c=' + encodeURIComponent(CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION);
 
-                sendStageDataToWeb3Forms(
-                    "stage1",
-                    STAGE1_PARTICIPANT_ID,
-                    jsPsych.data.get().csv(),
-                    {
-                        condition: CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION,
-                        age: ageRaw,
-                        sex: sexRaw
-                    }
-                ).then(function() {
+                setTimeout(function() {
                     window.location.href = STAGE2_URL;
-                }).catch(function(err) {
-                    console.error(err);
-                    alert("Не удалось отправить данные первой части. Пожалуйста, сообщите экспериментатору.");
-                    window.location.href = STAGE2_URL;
-                }).finally(function() {
-                    done();
-                });
+                }, 900);
             }
         };
+
 
 // -
         // Timeline
