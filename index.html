@@ -9,7 +9,6 @@
     <script src="https://cdn.jsdelivr.net/npm/jspsych@6.3.1/plugins/jspsych-survey-likert.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspsych@6.3.1/plugins/jspsych-survey-text.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspsych@6.3.1/plugins/jspsych-call-function.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jspsych@6.3.1/css/jspsych.css">
 
@@ -226,149 +225,135 @@ DEBUG_CONDITION = assignCondition();
 var RESPONSES_REQUIRED = false;
 var STAGE1_PARTICIPANT_ID = '';
 var STAGE2_URL = '';
-var WEB3FORMS_ACCESS_KEY = 'd5801e60-32a6-40aa-82b8-b546db2d91d6';
 
-async function sendStageDataToWeb3Forms(stageLabel, participantId, dataString, meta) {
-    var formData = new FormData();
-    formData.append("access_key", WEB3FORMS_ACCESS_KEY);
-    formData.append("subject", "Conformity experiment " + stageLabel + " - " + participantId);
-    formData.append("from_name", "Conformity Experiment");
-    formData.append("message",
-        "participant_id: " + participantId + "\n" +
-        "stage: " + stageLabel + "\n" +
-        "condition: " + (meta.condition || "") + "\n" +
-        "age: " + (meta.age || "") + "\n" +
-        "sex: " + (meta.sex || "") + "\n\n" +
-        "DATA_START\n" + dataString + "\nDATA_END"
-    );
+var GOOGLE_SHEETS_WEB_APP_URL = 'PASTE_YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE';
 
-    var response = await fetch("https://api.web3forms.com/submit", {
-        method: "POST",
-        body: formData
-    });
-    var result = await response.json();
-    if (!response.ok || !result.success) {
-        throw new Error(result.message || "Web3Forms submission failed");
-    }
-    return result;
+function slugifyKey(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-zA-Z0-9а-яА-ЯёЁ]+/g, '_')
+        .replace(/^_+|_+$/g, '');
 }
 
-
-
-function downloadBlob(filename, blob) {
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
+function safeParseJSON(value) {
+    if (!value) return {};
+    if (typeof value === 'object') return value;
+    try { return JSON.parse(value); } catch (e) { return {}; }
 }
 
-function toCSVFromRows(rows) {
-    if (!rows || !rows.length) return '';
-    var headers = [];
-    rows.forEach(function(row) {
-        Object.keys(row).forEach(function(key) {
-            if (headers.indexOf(key) === -1) headers.push(key);
+function normalizeRawRowsForSheets(rows) {
+    return rows.map(function(row) {
+        var copy = {};
+        Object.keys(row || {}).forEach(function(key) {
+            var value = row[key];
+            if (value && typeof value === 'object') {
+                copy[key] = JSON.stringify(value);
+            } else {
+                copy[key] = value;
+            }
         });
+        return copy;
+    });
+}
+
+function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
+    var allRows = jsPsych.data.get().values();
+    var formatted = {
+        participant_id: participantId,
+        age: ageRaw || '',
+        sex: sexRaw || '',
+        selected_condition: DEBUG_CONDITION,
+        selected_condition_label: CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION
+    };
+
+    allRows.forEach(function(row) {
+        if (!row) return;
+
+        if (row.trial_type === 'ranking_result') {
+            for (var i = 1; i <= 9; i++) {
+                formatted['ranking_' + i] = row['ranking_' + i] || '';
+            }
+        }
+
+        if (row.trial_type === 'survey-text') {
+            var textResponses = safeParseJSON(row.responses);
+            if (row.questionnaire_section === 'paraphrase_task') {
+                formatted.paraphrase_1 = textResponses.Q0 || '';
+                formatted.paraphrase_2 = textResponses.Q1 || '';
+                formatted.paraphrase_3 = textResponses.Q2 || '';
+            } else {
+                if (textResponses.Q0 !== undefined) formatted.demographics_age = textResponses.Q0 || '';
+                if (textResponses.Q1 !== undefined) formatted.demographics_class_course = textResponses.Q1 || '';
+                if (textResponses.Q2 !== undefined) formatted.demographics_city = textResponses.Q2 || '';
+            }
+        }
+
+        if (row.questionnaire_item === 'gender') {
+            formatted.gender_label = row.gender_label || '';
+            formatted.gender_code = row.gender_code || '';
+        }
+
+        if (row.trial_type === 'survey-likert') {
+            var section = slugifyKey(row.questionnaire_section || row.rating_type || 'survey_likert');
+            var likertResponses = safeParseJSON(row.responses || row.response);
+            Object.keys(likertResponses).forEach(function(qKey) {
+                var rawValue = likertResponses[qKey];
+                formatted[section + '_' + qKey.toLowerCase()] = (typeof rawValue === 'number') ? rawValue + 1 : rawValue;
+            });
+
+            [
+                'pakr_autonomy_mean', 'pakr_control_mean', 'pakr_total_mean',
+                'bpns21_autonomy_mean', 'bpns21_competence_mean', 'bpns21_relatedness_mean', 'bpns21_total_raw_mean',
+                'reactance_norm_mean', 'reactance_independence_mean', 'reactance_resistance_mean', 'reactance_emotional_mean', 'reactance_total_mean',
+                'scm_warmth_mean', 'scm_competence_mean', 'scm_adults_warmth_mean', 'scm_adults_competence_mean',
+                'scm_french_warmth_mean', 'scm_french_competence_mean', 'scm_teenagers_warmth_mean', 'scm_teenagers_competence_mean',
+                'scm_americans_warmth_mean', 'scm_americans_competence_mean', 'scm_italians_warmth_mean', 'scm_italians_competence_mean'
+            ].forEach(function(metric) {
+                if (row[metric] !== undefined) formatted[metric] = row[metric];
+            });
+        }
+
+        if (row.rating_type === 'personal_liking') {
+            formatted['dish_' + (Number(row.dish_index) + 1) + '_name'] = row.dish || '';
+            formatted['dish_' + (Number(row.dish_index) + 1) + '_personal_liking'] = safeParseJSON(row.responses).Q0 !== undefined ? safeParseJSON(row.responses).Q0 + 1 : '';
+        }
+
+        if (row.rating_type === 'expected_pleasure') {
+            formatted['dish_' + (Number(row.dish_index) + 1) + '_name'] = row.dish || '';
+            formatted['dish_' + (Number(row.dish_index) + 1) + '_expected_pleasure'] = safeParseJSON(row.responses).Q0 !== undefined ? safeParseJSON(row.responses).Q0 + 1 : '';
+        }
     });
 
-    function esc(value) {
-        if (value === undefined || value === null) return '';
-        var s = String(value);
-        if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
-        return s;
+    return formatted;
+}
+
+function sendPayloadToGoogleSheets(payload) {
+    if (!GOOGLE_SHEETS_WEB_APP_URL || GOOGLE_SHEETS_WEB_APP_URL.indexOf('PASTE_YOUR_') === 0) {
+        return Promise.resolve({ skipped: true });
     }
 
-    var lines = [headers.join(',')];
-    rows.forEach(function(row) {
-        lines.push(headers.map(function(h) { return esc(row[h]); }).join(','));
-    });
-    return lines.join('\n');
-}
+    var body = JSON.stringify(payload);
 
-function parseResponsesSafe(responses) {
-    if (!responses) return {};
-    if (typeof responses === 'object') return responses;
-    try {
-        return JSON.parse(responses);
-    } catch (e) {
-        return {};
-    }
-}
-
-function addResponseColumns(target, prefix, responsesObj) {
-    Object.keys(responsesObj || {}).forEach(function(key) {
-        target[prefix + '_' + key] = responsesObj[key];
-    });
-}
-
-function buildStage1FormattedRow() {
-    var row = {};
-    var genderTrial = jsPsych.data.get().filter({ questionnaire_item: 'gender' }).last(1).values()[0] || {};
-    var demoTrial = jsPsych.data.get().filter({ trial_type: 'survey-text' }).values().find(function(t) {
-        return t.responses && typeof t.responses === 'string' && t.responses.indexOf('"Q0"') !== -1;
-    }) || {};
-    var demo = parseResponsesSafe(demoTrial.responses);
-
-    row.participant_id = STAGE1_PARTICIPANT_ID || '';
-    row.selected_condition = DEBUG_CONDITION || '';
-    row.selected_condition_label = CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION || '';
-    row.age = demo.Q0 || '';
-    row.class_course = demo.Q1 || '';
-    row.city = demo.Q2 || '';
-    row.gender_code = genderTrial.gender_code || '';
-    row.gender_label = genderTrial.gender_label || '';
-
-    for (var i = 0; i < ranked.length; i++) {
-        row['ranking_' + (i + 1)] = ranked[i] || '';
+    if (navigator.sendBeacon) {
+        try {
+            var blob = new Blob([body], { type: 'text/plain;charset=UTF-8' });
+            var queued = navigator.sendBeacon(GOOGLE_SHEETS_WEB_APP_URL, blob);
+            if (queued) {
+                return Promise.resolve({ queued: true });
+            }
+        } catch (e) {}
     }
 
-    var pakr = jsPsych.data.get().filter({ questionnaire_section: 'PAKR' }).values()[0];
-    addResponseColumns(row, 'pakr', parseResponsesSafe(pakr && pakr.responses));
-
-    var schoolNeeds = jsPsych.data.get().filter({ questionnaire_section: 'Basic Psychological Need Satisfaction 21' }).values()[0];
-    addResponseColumns(row, 'bpns21', parseResponsesSafe(schoolNeeds && schoolNeeds.responses));
-
-    var reactance = jsPsych.data.get().filter({ questionnaire_section: 'Hong Reactance Scale' }).values()[0];
-    addResponseColumns(row, 'reactance', parseResponsesSafe(reactance && reactance.responses));
-
-    var deviant = jsPsych.data.get().filter({ questionnaire_section: 'Sharov Deviant Activity' }).values()[0];
-    addResponseColumns(row, 'deviant', parseResponsesSafe(deviant && deviant.responses));
-
-    ['adults','french','teenagers','americans','italians'].forEach(function(groupKey) {
-        var scm = jsPsych.data.get().filter({ questionnaire_section: 'SCM', scm_group: groupKey }).values()[0];
-        addResponseColumns(row, 'scm_' + groupKey, parseResponsesSafe(scm && scm.responses));
+    return fetch(GOOGLE_SHEETS_WEB_APP_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: body,
+        keepalive: true
+    }).then(function() {
+        return { sent: true };
     });
-
-    var personalRatings = jsPsych.data.get().filter({ rating_type: 'personal_liking', trial_type: 'survey-likert' }).values();
-    personalRatings.forEach(function(trial, idx) {
-        var resp = parseResponsesSafe(trial.responses);
-        row['personal_liking_' + (idx + 1)] = resp.Q0 !== undefined ? Number(resp.Q0) + 1 : '';
-        row['personal_liking_dish_' + (idx + 1)] = trial.dish || '';
-    });
-
-    var expectedRatings = jsPsych.data.get().filter({ rating_type: 'expected_pleasure', trial_type: 'survey-likert' }).values();
-    expectedRatings.forEach(function(trial, idx) {
-        var resp = parseResponsesSafe(trial.responses);
-        row['expected_pleasure_' + (idx + 1)] = resp.Q0 !== undefined ? Number(resp.Q0) + 1 : '';
-        row['expected_pleasure_dish_' + (idx + 1)] = trial.dish || '';
-    });
-
-    var paraphrase = jsPsych.data.get().filter({ questionnaire_section: 'paraphrase_task' }).values()[0];
-    addResponseColumns(row, 'paraphrase', parseResponsesSafe(paraphrase && paraphrase.responses));
-
-    return row;
-}
-
-async function downloadStage1Zip(participantId) {
-    var zip = new JSZip();
-    zip.file(participantId + "_stage1_raw.csv", jsPsych.data.get().csv());
-    zip.file(participantId + "_stage1_formatted.csv", toCSVFromRows([buildStage1FormattedRow()]));
-    var blob = await zip.generateAsync({type: "blob"});
-    downloadBlob(participantId + "_stage1_exports.zip", blob);
 }
 
 
@@ -1123,7 +1108,7 @@ var reactance_questionnaire = {
 var finalize_stage1 = {
             type: "call-function",
             async: true,
-            func: async function (done) {
+            func: function (done) {
                 var textTrials = jsPsych.data.get().filter({trial_type: 'survey-text'}).values();
                 var demoTrial = textTrials.find(function(t) {
                     return t.responses && typeof t.responses === 'string' && t.responses.indexOf('"Q0"') !== -1;
@@ -1161,17 +1146,21 @@ var finalize_stage1 = {
                     + '&sex=' + encodeURIComponent(sexRaw)
                     + '&c=' + encodeURIComponent(CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION);
 
-                try {
-                    await downloadStage1Zip(STAGE1_PARTICIPANT_ID);
-                } catch (err) {
-                    console.error(err);
-                    alert("Не удалось подготовить файлы первой части.");
-                }
+                
+                var rawRows = normalizeRawRowsForSheets(jsPsych.data.get().values());
+                var formattedRow = buildStage1FormattedRow(STAGE1_PARTICIPANT_ID, ageRaw, sexRaw);
 
-                setTimeout(function() {
+                sendPayloadToGoogleSheets({
+                    stage: 'stage1',
+                    participant_id: STAGE1_PARTICIPANT_ID,
+                    raw_rows: rawRows,
+                    formatted_row: formattedRow
+                }).catch(function(err) {
+                    console.error(err);
+                }).finally(function() {
                     window.location.href = STAGE2_URL;
                     done();
-                }, 900);
+                });
             }
         };
 
