@@ -16,8 +16,6 @@
 
   let assignedFeedback = FEEDBACK_MESSAGES[Math.floor(Math.random() * FEEDBACK_MESSAGES.length)];
 
-  const GOOGLE_SHEETS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbz8A-YGjg735zM76TYyGh4LipI5cUx93zQJlujaN570CdBnDHsrMW3_f9R7cYX2Vmwq/exec';
-
   const jsPsych = initJsPsych({
     show_progress_bar: false,
     auto_update_progress_bar: false
@@ -41,6 +39,8 @@
         ${text}
       </div>`;
   }
+
+  const GOOGLE_SHEETS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbz8A-YGjg735zM76TYyGh4LipI5cUx93zQJlujaN570CdBnDHsrMW3_f9R7cYX2Vmwq/exec';
 
   function safeJsonParse(value, fallback = {}) {
     try {
@@ -133,7 +133,6 @@
       formatted_row: buildStage2FormattedRow()
     });
   }
-
 
   async function loadWorkbookRows(filename) {
     const response = await fetch(filename, { cache: 'no-store' });
@@ -632,11 +631,13 @@
     type: jsPsychCallFunction,
     async: true,
     func: function(done) {
-      sendStage2DataToGoogleSheets().then(function() {
+      Promise.race([
+        sendStage2DataToGoogleSheets(),
+        new Promise(function(resolve) { setTimeout(resolve, 1200); })
+      ]).then(function() {
         done();
       }).catch(function(err) {
         console.error(err);
-        alert("Не удалось отправить данные второй части. Пожалуйста, сообщите экспериментатору.");
         done();
       });
     },
