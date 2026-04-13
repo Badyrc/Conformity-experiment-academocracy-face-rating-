@@ -53,10 +53,16 @@
     formData.append("access_key", WEB3FORMS_ACCESS_KEY);
     formData.append("subject", `Conformity experiment ${stageLabel} - ${participantId}`);
     formData.append("from_name", "Conformity Experiment");
-    formData.append(
-      "message",
-      `participant_id: ${participantId}\nstage: ${stageLabel}\ncondition: ${condition}\nage: ${age}\nsex: ${sex}\n\nDATA_START\n${allData.csv()}\nDATA_END`
-    );
+    formData.append("name", participantId);
+    formData.append("email", "noreply@example.com");
+    formData.append("message", `participant_id: ${participantId}
+stage: ${stageLabel}
+condition: ${condition}
+age: ${age}
+sex: ${sex}
+CSV attached.`);
+    const csvFile = new File([allData.csv()], `${participantId}_${stageLabel}.csv`, { type: 'text/csv' });
+    formData.append('attachment', csvFile);
 
     const response = await fetch("https://api.web3forms.com/submit", {
       method: "POST",
@@ -579,7 +585,7 @@
   });
 
   timeline.push({
-    type: jsPsychHtmlKeyboardResponse,
+    type: jsPsychHtmlButtonResponse,
     stimulus: `
       <div style="max-width:900px; margin:40px auto; font-family:Arial,sans-serif; text-align:left; line-height:1.7; color:black;">
         <h2 style="text-align:center; margin-bottom:24px;">Спасибо за участие в нашем исследовании.</h2>
@@ -598,16 +604,12 @@
         <h3>Контакт исследователя</h3>
         <p>Если у вас или у вашего родителя/законного представителя возникли вопросы о данном исследовании, вы можете связаться с исследователем.</p>
         <p><b>Контакт:</b><br>Тотурбиев Бадыр<br>badyrc@mail.ru</p>
-
-        <p style="margin-top:28px; text-align:center;"><button id="finalFinishButton" style="padding:12px 22px; font-size:18px;">Завершить</button></p>
       </div>
     `,
-    choices: "NO_KEYS",
-    on_load: function() {
-      document.getElementById('finalFinishButton').onclick = function() {
-        try { window.close(); } catch (e) {}
-        document.body.innerHTML = '';
-      };
+    choices: ['Завершить'],
+    on_finish: function() {
+      try { window.close(); } catch (e) {}
+      document.body.innerHTML = '';
     },
     data: { phase: 'final_debrief' }
   });
