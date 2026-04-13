@@ -15,7 +15,7 @@
   ];
 
   let assignedFeedback = FEEDBACK_MESSAGES[Math.floor(Math.random() * FEEDBACK_MESSAGES.length)];
-  const WEB3FORMS_ACCESS_KEY = 'd5801e60-32a6-40aa-82b8-b546db2d91d6';
+  const GOOGLE_SHEETS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbz8A-YGjg735zM76TYyGh4LipI5cUx93zQJlujaN570CdBnDHsrMW3_f9R7cYX2Vmwq/exec';
 
   const jsPsych = initJsPsych({
     show_progress_bar: false,
@@ -41,33 +41,119 @@
       </div>`;
   }
 
-
-  async function sendStageDataToWeb3Forms(stageLabel) {
-    const allData = jsPsych.data.get();
-    const participantId = allData.values()[0]?.participant_id || '001';
-    const age = allData.values()[0]?.age || '';
-    const sex = allData.values()[0]?.sex || '';
-    const condition = allData.values()[0]?.upstream_condition || '';
-
-    const formData = new FormData();
-    formData.append("access_key", WEB3FORMS_ACCESS_KEY);
-    formData.append("subject", `Conformity experiment ${stageLabel} - ${participantId}`);
-    formData.append("from_name", "Conformity Experiment");
-    formData.append(
-      "message",
-      `participant_id: ${participantId}\nstage: ${stageLabel}\ncondition: ${condition}\nage: ${age}\nsex: ${sex}\n\nDATA_START\n${allData.csv()}\nDATA_END`
-    );
-
-    const response = await fetch("https://api.web3forms.com/submit", {
-      method: "POST",
-      body: formData
-    });
-    const result = await response.json();
-    if (!response.ok || !result.success) {
-      throw new Error(result.message || "Web3Forms submission failed");
+  function safeJsonParse(value, fallback = {}) {
+    try {
+      return typeof value === 'string' ? JSON.parse(value) : (value || fallback);
+    } catch (e) {
+      return fallback;
     }
-    return result;
   }
+
+  function buildStage2CompactRawRows() {
+    const trials = jsPsych.data.get().values();
+    return trials.map(function(t, index) {
+      return {
+        row_index: index + 1,
+        trial_type: t.trial_type || '',
+        phase: t.phase || '',
+        participant_id: t.participant_id || incoming.participant_id || '',
+        age: t.age || incoming.age || '',
+        sex: t.sex || incoming.sex || '',
+        upstream_condition: t.upstream_condition || incoming.condition || '',
+        feedback_condition: t.feedback_condition || '',
+        rt: t.rt || '',
+        response: t.response !== undefined ? (typeof t.response === 'object' ? JSON.stringify(t.response) : t.response) : '',
+        responses: t.responses !== undefined ? (typeof t.responses === 'object' ? JSON.stringify(t.responses) : t.responses) : '',
+        rating: t.rating !== undefined ? t.rating : '',
+        stimulus_image: t.stimulus_image || '',
+        majority_rating: t.majority_rating || '',
+        majority_percent: t.majority_percent || '',
+        break_score: t.break_score || '',
+        break_duration_seconds: t.break_duration_seconds || '',
+        questionnaire_section: t.questionnaire_section || '',
+        questionnaire_item: t.questionnaire_item || ''
+      };
+    });
+  }
+
+  function buildStage2FormattedRow() {
+    const trials = jsPsych.data.get().values();
+    const first = trials[0] || {};
+    const row = {
+      participant_id: first.participant_id || incoming.participant_id || '',
+      stage: 'stage2',
+      age: first.age || incoming.age || '',
+      sex: first.sex || incoming.sex || '',
+      upstream_condition: first.upstream_condition || incoming.condition || '',
+      feedback_condition: first.feedback_condition || assignedFeedback.key,
+      feedback_text: first.feedback_text || assignedFeedback.text
+    };
+
+    const messageQuestionnaire = trials.find(t => t.phase === 'message_questionnaire');
+    if (messageQuestionnaire) {
+      const resp = safeJsonParse(messageQuestionnaire.response, safeJsonParse(messageQuestionnaire.responses, {}));
+      row.agree_assessment = resp.agree_assessment || '';
+      row.fairness_message = resp.fairness_message || '';
+      row.message_unpleasant = resp.message_unpleasant || '';
+    }
+
+    const suspicionQuestionnaire = trials.find(t => t.phase === 'suspicion_questionnaire');
+    if (suspicionQuestionnaire) {
+      const resp = safeJsonParse(suspicionQuestionnaire.response, safeJsonParse(suspicionQuestionnaire.responses, {}));
+      row.study_guess = resp.study_guess || '';
+      row.suspected_deception = resp.suspected_deception || '';
+      row.deception_guess = resp.deception_guess || '';
+      row.unusual_notes = resp.unusual_notes || '';
+      row.final_comment = resp.final_comment || '';
+    }
+
+    const breakTrial = trials.find(t => t.phase === 'break_firefly');
+    if (breakTrial) {
+      row.break_score = breakTrial.break_score || '';
+      row.break_duration_seconds = breakTrial.break_duration_seconds || '';
+    }
+
+    const mainRatings = trials.filter(t => t.phase === 'main_rating');
+    mainRatings.forEach((trial, index) => {
+      const n = index + 1;
+      row['face_' + n + '_stimulus'] = trial.stimulus_image || '';
+      row['face_' + n + '_majority_rating'] = trial.majority_rating || '';
+      row['face_' + n + '_chosen_rating'] = trial.rating || trial.response || '';
+    });
+
+    return row;
+  }
+
+  function sendStage2DataToGoogleSheets() {
+    const trials = jsPsych.data.get().values();
+    const first = trials[0] || {};
+    const payload = {
+      stage: 'stage2',
+      participant_id: first.participant_id || incoming.participant_id || '',
+      age: first.age || incoming.age || '',
+      sex: first.sex || incoming.sex || '',
+      condition: first.upstream_condition || incoming.condition || '',
+      raw_rows: buildStage2CompactRawRows(),
+      formatted_row: buildStage2FormattedRow()
+    };
+
+    const body = JSON.stringify(payload);
+
+    return fetch(GOOGLE_SHEETS_WEB_APP_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: body,
+      credentials: 'omit',
+      cache: 'no-store'
+    }).then(function() {
+      return { sent: true, transport: 'fetch' };
+    }).catch(function(err) {
+      console.error(err);
+      return { sent: false, transport: 'fetch_failed' };
+    });
+  }
+
 
 
   async function loadWorkbookRows(filename) {
@@ -564,15 +650,45 @@
 
 
   timeline.push({
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: `
+      <div style="max-width:760px; margin:80px auto; font-family:Arial,sans-serif; color:black; text-align:center; line-height:1.6;">
+        <h2 style="margin-bottom:16px;">Сохранение ответов</h2>
+        <p>Пожалуйста, подождите несколько секунд. Ваши ответы сохраняются.</p>
+      </div>
+    `,
+    choices: "NO_KEYS",
+    trial_duration: 900,
+    data: { phase: 'saving_stage2_screen' }
+  });
+
+  timeline.push({
     type: jsPsychCallFunction,
     async: true,
     func: function(done) {
-      sendStageDataToWeb3Forms("stage2").then(function() {
-        done();
+      sendStage2DataToGoogleSheets().then(function(result) {
+        try {
+          jsPsych.data.write({
+            phase: 'send_stage2_data',
+            send_stage2_transport: result && result.transport ? result.transport : '',
+            send_stage2_sent: result && typeof result.sent !== 'undefined' ? result.sent : ''
+          });
+        } catch (e) {}
+        setTimeout(function() {
+          done();
+        }, 1200);
       }).catch(function(err) {
         console.error(err);
-        alert("Не удалось отправить данные второй части. Пожалуйста, сообщите экспериментатору.");
-        done();
+        try {
+          jsPsych.data.write({
+            phase: 'send_stage2_data',
+            send_stage2_transport: 'error',
+            send_stage2_sent: false
+          });
+        } catch (e) {}
+        setTimeout(function() {
+          done();
+        }, 1200);
       });
     },
     data: { phase: 'send_stage2_data' }
