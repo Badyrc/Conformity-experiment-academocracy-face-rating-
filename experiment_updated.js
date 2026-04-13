@@ -76,7 +76,7 @@
       } catch (e) {}
     }
 
-    return fetch(GOOGLE_SHEETS_WEB_APP_URL, {
+    return fetch(https://script.google.com/macros/s/AKfycbye3RyF0ncf0BnAlX2JS_GUGg1MyDUVpZg8DOno9s4ZBSpYJoXExmx3WpqQHZck51Vb/exec, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
