@@ -15,7 +15,6 @@
   ];
 
   let assignedFeedback = FEEDBACK_MESSAGES[Math.floor(Math.random() * FEEDBACK_MESSAGES.length)];
-  const GOOGLE_SHEETS_WEB_APP_URL = 'PASTE_YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE';
 
   const jsPsych = initJsPsych({
     show_progress_bar: false,
@@ -41,98 +40,99 @@
       </div>`;
   }
 
+  const GOOGLE_SHEETS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbye3RyF0ncf0BnA1X2JS_GUGg1MyDUVpZg8DOno9s4ZBSpYJoXExmx3WpqQHZck51Vb/exec';
 
-  function safeParseJSON(value) {
-    if (!value) return {};
-    if (typeof value === 'object') return value;
-    try { return JSON.parse(value); } catch (e) { return {}; }
-  }
-
-  function normalizeRawRowsForSheets(rows) {
-    return rows.map(function(row) {
-      const copy = {};
-      Object.keys(row || {}).forEach(function(key) {
-        const value = row[key];
-        copy[key] = value && typeof value === 'object' ? JSON.stringify(value) : value;
-      });
-      return copy;
-    });
-  }
-
-  function sendPayloadToGoogleSheets(payload) {
-    if (!GOOGLE_SHEETS_WEB_APP_URL || GOOGLE_SHEETS_WEB_APP_URL.indexOf('PASTE_YOUR_') === 0) {
-      return Promise.resolve({ skipped: true });
+  function safeJsonParse(value, fallback = {}) {
+    try {
+      return typeof value === 'string' ? JSON.parse(value) : (value || fallback);
+    } catch (e) {
+      return fallback;
     }
+  }
 
+  function postPayloadToGoogleSheets(payload) {
     const body = JSON.stringify(payload);
 
-    if (navigator.sendBeacon) {
-      try {
+    try {
+      if (navigator.sendBeacon) {
         const blob = new Blob([body], { type: 'text/plain;charset=UTF-8' });
-        const queued = navigator.sendBeacon(GOOGLE_SHEETS_WEB_APP_URL, blob);
-        if (queued) {
-          return Promise.resolve({ queued: true });
+        const beaconSent = navigator.sendBeacon(GOOGLE_SHEETS_WEB_APP_URL, blob);
+        if (beaconSent) {
+          return Promise.resolve({ sent: true, transport: 'beacon' });
         }
-      } catch (e) {}
-    }
+      }
+    } catch (e) {}
 
-    return fetch('https://script.google.com/macros/s/AKfycbye3RyF0ncf0BnAlX2JS_GUGg1MyDUVpZg8DOno9s4ZBSpYJoXExmx3WpqQHZck51Vb/exec', {
+    return fetch(GOOGLE_SHEETS_WEB_APP_URL, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
       body,
-      keepalive: true
-    }).then(function() {
-      return { sent: true };
-    });
+      keepalive: true,
+      credentials: 'omit'
+    }).then(() => ({ sent: true, transport: 'fetch' }));
   }
 
   function buildStage2FormattedRow() {
-    const allRows = jsPsych.data.get().values();
-    const firstRow = allRows[0] || {};
-    const formatted = {
-      participant_id: firstRow.participant_id || incoming.participant_id || '',
-      age: firstRow.age || incoming.age || '',
-      sex: firstRow.sex || incoming.sex || '',
-      upstream_condition: firstRow.upstream_condition || incoming.condition || '',
-      feedback_condition: assignedFeedback.key,
-      feedback_text: assignedFeedback.text
+    const trials = jsPsych.data.get().values();
+    const first = trials[0] || {};
+    const row = {
+      participant_id: first.participant_id || incoming.participant_id || '',
+      stage: 'stage2',
+      age: first.age || incoming.age || '',
+      sex: first.sex || incoming.sex || '',
+      upstream_condition: first.upstream_condition || incoming.condition || '',
+      feedback_condition: first.feedback_condition || assignedFeedback.key,
+      feedback_text: first.feedback_text || assignedFeedback.text
     };
 
-    const mainRatings = allRows.filter(function(row) {
-      return row && row.phase === 'main_rating';
-    });
+    const messageQuestionnaire = trials.find(t => t.phase === 'message_questionnaire');
+    if (messageQuestionnaire) {
+      const resp = safeJsonParse(messageQuestionnaire.response, safeJsonParse(messageQuestionnaire.responses, {}));
+      row.agree_assessment = resp.agree_assessment || '';
+      row.fairness_message = resp.fairness_message || '';
+      row.message_unpleasant = resp.message_unpleasant || '';
+    }
 
-    mainRatings.forEach(function(row, index) {
+    const suspicionQuestionnaire = trials.find(t => t.phase === 'suspicion_questionnaire');
+    if (suspicionQuestionnaire) {
+      const resp = safeJsonParse(suspicionQuestionnaire.response, safeJsonParse(suspicionQuestionnaire.responses, {}));
+      row.study_guess = resp.study_guess || '';
+      row.suspected_deception = resp.suspected_deception || '';
+      row.deception_guess = resp.deception_guess || '';
+      row.unusual_notes = resp.unusual_notes || '';
+      row.final_comment = resp.final_comment || '';
+    }
+
+    const breakTrial = trials.find(t => t.phase === 'break_firefly');
+    if (breakTrial) {
+      row.break_score = breakTrial.break_score || '';
+      row.break_duration_seconds = breakTrial.break_duration_seconds || '';
+    }
+
+    const mainRatings = trials.filter(t => t.phase === 'main_rating');
+    mainRatings.forEach((trial, index) => {
       const n = index + 1;
-      formatted['face_' + n + '_stimulus'] = row.stimulus_image || '';
-      formatted['face_' + n + '_majority_rating'] = row.majority_rating || '';
-      formatted['face_' + n + '_chosen_rating'] = row.rating || row.response || '';
+      row['face_' + n + '_stimulus'] = trial.stimulus_image || '';
+      row['face_' + n + '_majority_rating'] = trial.majority_rating || '';
+      row['face_' + n + '_chosen_rating'] = trial.rating || trial.response || '';
     });
 
-    allRows.forEach(function(row) {
-      if (!row) return;
-      if (row.phase === 'message_questionnaire') {
-        formatted.agree_assessment = row.response ? row.response.agree_assessment || '' : '';
-        formatted.fairness_message = row.response ? row.response.fairness_message || '' : '';
-        formatted.message_unpleasant = row.response ? row.response.message_unpleasant || '' : '';
-      }
-      if (row.phase === 'suspicion_questionnaire') {
-        formatted.study_guess = row.response ? row.response.study_guess || '' : '';
-        formatted.suspected_deception = row.response ? row.response.suspected_deception || '' : '';
-        formatted.deception_guess = row.response ? row.response.deception_guess || '' : '';
-        formatted.unusual_notes = row.response ? row.response.unusual_notes || '' : '';
-        formatted.final_comment = row.response ? row.response.final_comment || '' : '';
-      }
-      if (row.phase === 'break_firefly') {
-        formatted.break_score = row.break_score || '';
-        formatted.break_duration_seconds = row.break_duration_seconds || '';
-      }
-    });
-
-    return formatted;
+    return row;
   }
 
+  function sendStage2DataToGoogleSheets() {
+    const allRows = jsPsych.data.get().values();
+    return postPayloadToGoogleSheets({
+      stage: 'stage2',
+      participant_id: allRows[0] && allRows[0].participant_id ? allRows[0].participant_id : (incoming.participant_id || ''),
+      age: allRows[0] && allRows[0].age ? allRows[0].age : (incoming.age || ''),
+      sex: allRows[0] && allRows[0].sex ? allRows[0].sex : (incoming.sex || ''),
+      condition: allRows[0] && allRows[0].upstream_condition ? allRows[0].upstream_condition : (incoming.condition || ''),
+      raw_rows: allRows,
+      formatted_row: buildStage2FormattedRow()
+    });
+  }
 
   async function loadWorkbookRows(filename) {
     const response = await fetch(filename, { cache: 'no-store' });
@@ -631,16 +631,13 @@
     type: jsPsychCallFunction,
     async: true,
     func: function(done) {
-      
-      const payload = {
-        stage: 'stage2',
-        participant_id: (jsPsych.data.get().values()[0] || {}).participant_id || incoming.participant_id || '',
-        raw_rows: normalizeRawRowsForSheets(jsPsych.data.get().values()),
-        formatted_row: buildStage2FormattedRow()
-      };
-      sendPayloadToGoogleSheets(payload).catch(function(err) {
+      Promise.race([
+        sendStage2DataToGoogleSheets(),
+        new Promise(function(resolve) { setTimeout(resolve, 1200); })
+      ]).then(function() {
+        done();
+      }).catch(function(err) {
         console.error(err);
-      }).finally(function() {
         done();
       });
     },
