@@ -310,18 +310,27 @@ function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
             }
         }
 
-        if (trial.questionnaire_item === 'gender') {
-            var genderIdx = Number(trial.button_pressed);
-            var genderFromButton = genderIdx === 0 ? 'Мужской' : (genderIdx === 1 ? 'Женский' : '');
-            var genderCodeFromButton = genderIdx === 0 ? 'male' : (genderIdx === 1 ? 'female' : '');
-            row.sex = trial.gender_label || trial.sex || PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || genderFromButton || row.sex || '';
-            row.gender = trial.gender_label || trial.sex || PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || genderFromButton || row.gender || '';
-            row.gender_label = trial.gender_label || trial.sex || PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || genderFromButton || row.gender_label || '';
-            row.gender_code = trial.gender_code || DEMO_GENDER_CODE || genderCodeFromButton || row.gender_code || '';
+        if (trial.questionnaire_item === 'gender' && trial.questionnaire_section === 'demographics_gender') {
+            var genderResp = safeJsonParse(trial.responses, safeJsonParse(trial.response, {}));
+            var genderIdx = genderResp.Q0 !== undefined ? Number(genderResp.Q0) : -1;
+            var genderFromResponse = genderIdx === 0 ? 'Мужской' : (genderIdx === 1 ? 'Женский' : '');
+            var genderCodeFromResponse = genderIdx === 0 ? 'male' : (genderIdx === 1 ? 'female' : '');
+            row.sex = trial.gender_label || trial.sex || PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || genderFromResponse || row.sex || '';
+            row.gender = trial.gender_label || trial.sex || PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || genderFromResponse || row.gender || '';
+            row.gender_label = trial.gender_label || trial.sex || PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || genderFromResponse || row.gender_label || '';
+            row.gender_code = trial.gender_code || DEMO_GENDER_CODE || genderCodeFromResponse || row.gender_code || '';
         }
 
         if (trial.trial_type === 'survey-likert') {
             var likertResp = safeJsonParse(trial.responses, safeJsonParse(trial.response, {}));
+
+            if (trial.questionnaire_section === 'demographics_gender') {
+                var genderIdxLikert = likertResp.Q0 !== undefined ? Number(likertResp.Q0) : -1;
+                row.sex = genderIdxLikert === 0 ? 'Мужской' : (genderIdxLikert === 1 ? 'Женский' : row.sex || '');
+                row.gender = row.sex;
+                row.gender_label = row.sex;
+                row.gender_code = genderIdxLikert === 0 ? 'male' : (genderIdxLikert === 1 ? 'female' : row.gender_code || '');
+            }
 
             if (trial.questionnaire_section === 'PAKR') {
                 for (var p = 0; p < 24; p++) {
@@ -763,15 +772,22 @@ var auto_condition_trial = {
         };
 
         var start_questionnaire_gender = {
-            type: "html-button-response",
-            stimulus:
-                "<div class='box'><h3>Анкета</h3><p><b>Укажите ваш пол:</b></p></div>",
-            choices: ["Мужской", "Женский"],
-            data: { questionnaire_item: "gender" },
+            type: "survey-likert",
+            preamble: "<h3>Анкета</h3><p><b>Укажите ваш пол:</b></p>",
+            questions: [
+                {
+                    prompt: "Пол:",
+                    labels: ["Мужской", "Женский"],
+                    required: true
+                }
+            ],
+            button_label: "Продолжить",
+            data: { questionnaire_section: "demographics_gender", questionnaire_item: "gender" },
             on_finish: function(data) {
+                var resp = safeJsonParse(data.responses, safeJsonParse(data.response, {}));
+                var idx = resp.Q0 !== undefined ? Number(resp.Q0) : -1;
                 var mapping = ["male", "female"];
                 var labels = ["Мужской", "Женский"];
-                var idx = Number(data.button_pressed);
                 data.gender_code = mapping[idx] || "";
                 data.gender_label = labels[idx] || "";
                 data.sex = data.gender_label || "";
@@ -1150,8 +1166,9 @@ var finalize_stage1 = {
                     return t.questionnaire_section === 'demographics';
                 }) || { responses: '{}' };
                 var demoResponses = safeJsonParse(demoTrial.responses, safeJsonParse(demoTrial.response, {}));
-                var genderTrial = jsPsych.data.get().filter({ questionnaire_item: 'gender' }).last(1).values()[0] || {};
-                var genderIdx = Number(genderTrial.button_pressed);
+                var genderTrial = jsPsych.data.get().filter({ questionnaire_section: 'demographics_gender' }).last(1).values()[0] || {};
+                var genderResp = safeJsonParse(genderTrial.responses, safeJsonParse(genderTrial.response, {}));
+                var genderIdx = genderResp.Q0 !== undefined ? Number(genderResp.Q0) : -1;
                 var genderLabelFallback = genderIdx === 0 ? 'Мужской' : (genderIdx === 1 ? 'Женский' : '');
                 STAGE1_PARTICIPANT_ID = 'P' + Date.now();
 
