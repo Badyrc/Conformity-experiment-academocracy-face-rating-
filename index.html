@@ -271,6 +271,7 @@ function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
         selected_condition_label: CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION,
         age: ageRaw || '',
         sex: sexRaw || DEMO_GENDER_LABEL || '',
+        gender_label: DEMO_GENDER_LABEL || sexRaw || '',
         gender_code: DEMO_GENDER_CODE || ''
     };
 
@@ -285,6 +286,12 @@ function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
             for (var r = 1; r <= 9; r++) {
                 row['ranking_' + r] = trial['ranking_' + r] || '';
             }
+        }
+
+        if (trial.trial_type === 'gender_result') {
+            row.sex = trial.sex || trial.gender_label || row.sex || '';
+            row.gender_label = trial.gender_label || trial.sex || row.gender_label || '';
+            row.gender_code = trial.gender_code || row.gender_code || '';
         }
 
         if (trial.trial_type === 'survey-text') {
@@ -305,6 +312,7 @@ function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
             var genderFromButton = genderIdx === 0 ? 'Мужской' : (genderIdx === 1 ? 'Женский' : '');
             var genderCodeFromButton = genderIdx === 0 ? 'male' : (genderIdx === 1 ? 'female' : '');
             row.sex = trial.gender_label || trial.sex || DEMO_GENDER_LABEL || genderFromButton || trial.gender_code || row.sex || '';
+            row.gender_label = trial.gender_label || trial.sex || DEMO_GENDER_LABEL || genderFromButton || row.gender_label || '';
             row.gender_code = trial.gender_code || DEMO_GENDER_CODE || genderCodeFromButton || row.gender_code || '';
         }
 
@@ -387,7 +395,9 @@ function sendStage1DataToGoogleSheets(participantId, ageRaw, sexRaw) {
         stage: 'stage1',
         participant_id: participantId,
         age: ageRaw || '',
-        sex: sexRaw || '',
+        sex: sexRaw || DEMO_GENDER_LABEL || '',
+        gender_label: DEMO_GENDER_LABEL || '',
+        gender_code: DEMO_GENDER_CODE || '',
         condition: CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION,
         raw_rows: rawRows,
         formatted_row: formattedRow
@@ -1139,6 +1149,15 @@ var finalize_stage1 = {
                 STAGE1_PARTICIPANT_ID = 'P' + Date.now();
 
                 jsPsych.data.write({
+                    trial_type: "gender_result",
+                    questionnaire_item: "gender",
+                    sex: DEMO_GENDER_LABEL || genderTrial.gender_label || genderTrial.sex || genderLabelFallback || '',
+                    gender_label: DEMO_GENDER_LABEL || genderTrial.gender_label || genderTrial.sex || genderLabelFallback || '',
+                    gender_code: DEMO_GENDER_CODE || genderTrial.gender_code || (genderIdx === 0 ? 'male' : (genderIdx === 1 ? 'female' : '')),
+                    participant_id: STAGE1_PARTICIPANT_ID
+                });
+
+                jsPsych.data.write({
                     trial_type: "ranking_result",
                     ranking_1: ranked[0],
                     ranking_2: ranked[1],
@@ -1157,7 +1176,10 @@ var finalize_stage1 = {
                 jsPsych.data.addProperties({
                     participant_id: STAGE1_PARTICIPANT_ID,
                     selected_condition: DEBUG_CONDITION,
-                    selected_condition_label: CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION
+                    selected_condition_label: CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION,
+                    sex: DEMO_GENDER_LABEL || genderTrial.gender_label || genderTrial.sex || genderLabelFallback || '',
+                    gender_label: DEMO_GENDER_LABEL || genderTrial.gender_label || genderTrial.sex || genderLabelFallback || '',
+                    gender_code: DEMO_GENDER_CODE || genderTrial.gender_code || (genderIdx === 0 ? 'male' : (genderIdx === 1 ? 'female' : ''))
                 });
 
                 var ageRaw = demoResponses.Q0 || '';
