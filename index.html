@@ -271,12 +271,8 @@ function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
         sex: sexRaw || ''
     };
 
-    // Always persist the current ranked order into the formatted row.
-    // This avoids depending only on a synthetic ranking_result trial being present.
-    if (Array.isArray(ranked)) {
-        for (var rr = 0; rr < ranked.length; rr++) {
-            row['ranking_' + (rr + 1)] = ranked[rr] || '';
-        }
+    for (var rr = 0; rr < ranked.length; rr++) {
+        row['ranking_' + (rr + 1)] = ranked[rr] || '';
     }
 
     for (var i = 0; i < allTrials.length; i++) {
@@ -284,22 +280,20 @@ function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
 
         if (trial.trial_type === 'ranking_result') {
             for (var r = 1; r <= 9; r++) {
-                if (trial['ranking_' + r] !== undefined && trial['ranking_' + r] !== null && trial['ranking_' + r] !== '') {
-                    row['ranking_' + r] = trial['ranking_' + r];
-                }
+                row['ranking_' + r] = trial['ranking_' + r] || '';
             }
         }
 
         if (trial.trial_type === 'survey-text') {
-            var textResp = safeJsonParse(trial.responses, {});
+            var textResp = safeJsonParse(trial.responses, safeJsonParse(trial.response, {}));
             if (trial.questionnaire_section === 'paraphrase_task') {
                 row.paraphrase_1 = textResp.Q0 || '';
                 row.paraphrase_2 = textResp.Q1 || '';
                 row.paraphrase_3 = textResp.Q2 || '';
-            } else if (!row.age && textResp.Q0 !== undefined) {
-                row.age = textResp.Q0 || '';
-                row.class_or_course = textResp.Q1 || '';
-                row.city = textResp.Q2 || '';
+            } else if (trial.questionnaire_section === 'demographics') {
+                row.age = textResp.Q0 || row.age || '';
+                row.class_or_course = textResp.Q1 || row.class_or_course || '';
+                row.city = textResp.Q2 || row.city || '';
             }
         }
 
@@ -345,6 +339,16 @@ function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
                 for (var d = 0; d < 28; d++) {
                     row['deviant_q' + (d + 1)] = likertResp['Q' + d] !== undefined ? Number(likertResp['Q' + d]) + 1 : '';
                 }
+            }
+
+            if (trial.questionnaire_section === 'Individualism Collectivism 16') {
+                for (var ic = 0; ic < 16; ic++) {
+                    row['indcol_q' + (ic + 1)] = likertResp['Q' + ic] !== undefined ? Number(likertResp['Q' + ic]) + 1 : '';
+                }
+            }
+
+            if (trial.questionnaire_section === 'Food Importance') {
+                row.food_importance_q1 = likertResp.Q0 !== undefined ? Number(likertResp.Q0) + 1 : '';
             }
 
             if (trial.questionnaire_section === 'SCM' && trial.scm_group) {
@@ -595,12 +599,12 @@ var auto_condition_trial = {
 
         function getStatisticsAnnotation() {
             if (DEBUG_CONDITION === "ingroup") {
-                return "Из-за голосования подростков эти блюда вряд ли войдут в итоговое меню.";
+                return "По предварительным результатам голосования подростков эти блюда, скорее всего, не будут включены в итоговый вариант школьного меню.";
             }
             if (DEBUG_CONDITION === "outgroup") {
-                return "Из-за голосования взрослых эти блюда вряд ли войдут в итоговое меню.";
+                return "По предварительным результатам голосования взрослых эти блюда, скорее всего, не будут включены в итоговый вариант школьного меню.";
             }
-            return "Эти блюда вряд ли войдут в итоговое меню.";
+            return "По предварительным результатам эти блюда, скорее всего, не будут включены в итоговый вариант школьного меню.";
         }
 
         var statistics_screen = {
@@ -626,69 +630,50 @@ var auto_condition_trial = {
             choices: ["Продолжить"]
         };
 
+        var pre_feedback_reminder = {
+            type: "html-button-response",
+            stimulus:
+                "<div class='box'><h3>Напоминание</h3>" +
+                "<p>В начале исследования вы расположили блюда по предпочтению и отдельно оценили, насколько вам нравится каждое из них.</p>" +
+                "<p>Сейчас мы покажем вам краткую информацию, связанную с предыдущим этапом, а затем попросим еще раз оценить блюда.</p>" +
+                "<p>Пожалуйста, внимательно прочитайте информацию на следующем экране.</p></div>",
+            choices: ["Продолжить"]
+        };
+
+        var food_importance_questionnaire = {
+            type: "survey-likert",
+            preamble:
+                "<h3>Короткий вопрос</h3>" +
+                "<p>Пожалуйста, ответьте еще на один короткий вопрос.</p>",
+            questions: [
+                {
+                    prompt: "1. Насколько для вас в целом важно, чтобы школьная еда вам нравилась?",
+                    labels: ["1", "2", "3", "4", "5", "6", "7"],
+                    required: RESPONSES_REQUIRED
+                }
+            ],
+            button_label: "Продолжить",
+            data: { questionnaire_section: "Food Importance" }
+        };
+
         // -
         // Personal liking ratings
         // -
 
         var personal_ratings = dishes.map((dish, idx) => {
             return {
-                timeline: [
-                    {
-                        type: "survey-likert",
-                        preamble: `<h3>Часть 2. Оценка того, насколько вам нравится блюдо</h3><p>Блюдо ${idx + 1} из ${dishes.length}</p><p>1 - совсем не нравится. 5 - очень нравится.</p>`,
-                        questions: [{
-                            prompt: dish,
-                            labels: ["1", "2", "3", "4", "5"],
-                            required: RESPONSES_REQUIRED
-                        }],
-                        button_label: "Продолжить",
-                        data: {
-                            rating_type: "personal_liking",
-                            dish: dish,
-                            dish_index: idx
-                        }
-                    },
-                    {
-                        type: "html-button-response",
-                        stimulus: function () {
-
-                            var lastLikert =
-                                jsPsych.data.get()
-                                    .filter({ trial_type: "survey-likert" })
-                                    .last(1).values()[0];
-
-                            var response = lastLikert.response.Q0 + 1;
-
-                            return `
-                                <div class='box'>
-                                  <h3>Ваш ответ</h3>
-                                  <p><b>${dish}</b>: ${response}</p>
-                                  <button id="rateContinue">Продолжить</button>
-                                  <button id="rateBack">Назад</button>
-                                </div>`;
-                        },
-                        choices: [],
-                        on_load: function () {
-
-                            document.getElementById("rateContinue").onclick = function () {
-
-                                MUST_LOOP_BACK = false;
-                                jsPsych.finishTrial();
-                            };
-
-                            document.getElementById("rateBack").onclick = function () {
-                                MUST_LOOP_BACK = true;
-                                jsPsych.finishTrial();
-                            };
-                        }
-                    }
-                ],
-                loop_function: function () {
-                    if (MUST_LOOP_BACK === true) {
-                        MUST_LOOP_BACK = false;
-                        return true;
-                    }
-                    return false;
+                type: "survey-likert",
+                preamble: `<h3>Часть 2. Оценка того, насколько вам нравится блюдо</h3><p>Блюдо ${idx + 1} из ${dishes.length}</p><p>1: совсем не нравится. 5: очень нравится.</p>`,
+                questions: [{
+                    prompt: dish,
+                    labels: ["1", "2", "3", "4", "5"],
+                    required: RESPONSES_REQUIRED
+                }],
+                button_label: "Продолжить",
+                data: {
+                    rating_type: "personal_liking",
+                    dish: dish,
+                    dish_index: idx
                 }
             };
         });
@@ -699,62 +684,18 @@ var auto_condition_trial = {
 
         var school_ratings = dishes.map((dish, idx) => {
             return {
-                timeline: [
-                    {
-                        type: "survey-likert",
-                        preamble: `<h3>Часть 3. Повторная оценка блюда</h3><p>Блюдо ${idx + 1} из ${dishes.length}</p><p>1 - совсем не нравится. 5 - очень нравится.</p>`,
-                        questions: [{
-                            prompt: dish,
-                            labels: ["1", "2", "3", "4", "5"],
-                            required: RESPONSES_REQUIRED
-                        }],
-                        button_label: "Продолжить",
-                        data: {
-                            rating_type: "expected_pleasure",
-                            dish: dish,
-                            dish_index: idx
-                        }
-                    },
-                    {
-                        type: "html-button-response",
-                        stimulus: function () {
-
-                            var lastLikert =
-                                jsPsych.data.get()
-                                    .filter({ trial_type: "survey-likert" })
-                                    .last(1).values()[0];
-
-                            var response = lastLikert.response.Q0 + 1;
-
-                            return `
-                                <div class='box'>
-                                  <h3>Ваш ответ</h3>
-                                  <p><b>${dish}</b>: ${response}</p>
-                                  <button id="schoolContinue">Продолжить</button>
-                                  <button id="schoolBack">Назад</button>
-                                </div>`;
-                        },
-                        choices: [],
-                        on_load: function () {
-
-                            document.getElementById("schoolContinue").onclick = function () {
-                                MUST_LOOP_BACK = false;
-                                jsPsych.finishTrial();
-                            };
-
-                            document.getElementById("schoolBack").onclick = function () {
-                                MUST_LOOP_BACK = true;
-                                jsPsych.finishTrial();
-                            };
-                        }
-                    }
-                ],
-                loop_function: function () {
-                    if (MUST_LOOP_BACK === true) {
-                        MUST_LOOP_BACK = false;
-                        return true;
-                    }
-                    return false;
+                type: "survey-likert",
+                preamble: `<h3>Часть 3. Повторная оценка блюда</h3><p>Блюдо ${idx + 1} из ${dishes.length}</p><p>1: совсем не нравится. 5: очень нравится.</p>`,
+                questions: [{
+                    prompt: dish,
+                    labels: ["1", "2", "3", "4", "5"],
+                    required: RESPONSES_REQUIRED
+                }],
+                button_label: "Продолжить",
+                data: {
+                    rating_type: "expected_pleasure",
+                    dish: dish,
+                    dish_index: idx
                 }
             };
         });
@@ -768,14 +709,14 @@ var auto_condition_trial = {
             type: "html-button-response",
             stimulus:
                 "<div class='box'><h3>Уважаемый участник!</h3>" +
-                "<p>Это исследование займет около 15–20 минут.</p>" +
+                "<p>Это исследование займет около 15-20 минут.</p>" +
                 "<p>В этом исследовании мы попросим вас выполнить несколько коротких заданий, связанных с мнением и предпочтениями подростков.</p>" +
                 "<p><b>Сначала</b> вы ответите на несколько коротких вопросов о себе.</p>" +
                 "<p><b>Потом</b> вам нужно будет расположить блюда по предпочтению и оценить их.</p>" +
                 "<p><b>После этого</b> вы заполните несколько опросников и выполните короткое письменное задание на внимание.</p>" +
                 "<p><b>В конце</b> вы еще раз оцените блюда.</p>" +
                 "<p>Пожалуйста, проходите исследование внимательно, не отвлекайтесь и не закрывайте страницу до завершения.</p>" +
-                "<p>Здесь нет правильных и неправильных ответов — важно только ваше личное мнение.</p>" +
+                "<p>Здесь нет правильных и неправильных ответов , важно только ваше личное мнение.</p>" +
                 "<p>Вы можете прекратить участие в любой момент.</p></div>",
             choices: ["Продолжить"]
         };
@@ -796,7 +737,8 @@ var auto_condition_trial = {
                 { prompt: "Класс / курс:", rows: 1, columns: 20, required: false },
                 { prompt: "Город:", rows: 1, columns: 25, required: false }
             ],
-            button_label: "Продолжить"
+            button_label: "Продолжить",
+            data: { questionnaire_section: "demographics" }
         };
 
         var start_questionnaire_gender = {
@@ -879,9 +821,9 @@ var school_needs_questionnaire = {
             preamble:
                 "<h3>Опросник</h3>" +
                 "<p><b>Инструкция</b></p>" +
-                "<p>Вам предложен 21 утверждение. Ваша задача – внимательно ознакомиться с материалом, выбрать степень согласия с каждым из предложенных высказываний.</p>" +
+                "<p>Вам предложен 21 утверждение. Ваша задача: внимательно ознакомиться с материалом и выбрать степень согласия с каждым из предложенных высказываний.</p>" +
                 "<p>Руководствуйтесь следующей шкалой:</p>" +
-                "<p>1 – 2 – полностью не согласен<br>3 – скорее не согласен<br>4 – затрудняюсь ответить<br>5 – в целом согласен<br>6 – 7 – полностью согласен</p>" +
+                "<p>1 или 2: полностью не согласен<br>3: скорее не согласен<br>4: затрудняюсь ответить<br>5: в целом согласен<br>6 или 7: полностью согласен</p>" +
                 "<p>Старайтесь выбирать тот ответ, который первым пришел в голову. И помните, что нет «правильных» и неправильных ответов.</p>" +
                 "<p><b>Тестовый материал опроснику Удовлетворение базовых психологических потребностей</b></p>",
             questions: [
@@ -889,7 +831,7 @@ var school_needs_questionnaire = {
                 { prompt: "2. Мне действительно нравятся люди, с которыми я взаимодействую", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
                 { prompt: "3. Я часто чувствую себя недостаточно компетентным", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
                 { prompt: "4. Я чувствую, что жизнь тяготит меня", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
-                { prompt: "5. Люди, которые меня окружают, говорят, что я – мастер своего дела", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
+                { prompt: "5. Люди, которые меня окружают, говорят, что я хорошо справляюсь со своим делом", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
                 { prompt: "6. Я чувствую себя одиноким, даже когда вступаю в контакт с людьми", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
                 { prompt: "7. В основном я представляю сам себя и имею ограниченное число социальных контактов", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
                 { prompt: "8. Я чувствую себя свободным в выражении своих идей и мнений", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
@@ -1021,12 +963,12 @@ var individualism_collectivism_questionnaire = {
                 "<h3>Опросник</h3>" +
                 "<p>Ниже приведены утверждения о разных взглядах и привычках. Пожалуйста, отметьте, насколько вы согласны с каждым утверждением.</p>" +
                 "<p>Отвечайте так, как это обычно бывает у вас. Здесь нет правильных или неправильных ответов.</p>" +
-                "<p>Шкала ответов: 1 — совершенно не согласен(на), 2 — не согласен(на), 3 — скорее не согласен(на), 4 — затрудняюсь ответить, 5 — скорее согласен(на), 6 — согласен(на), 7 — полностью согласен(на).</p>",
+                "<p>Шкала ответов: 1 - совершенно не согласен(на), 2 - не согласен(на), 3 - скорее не согласен(на), 4 - затрудняюсь ответить, 5 - скорее согласен(на), 6 - согласен(на), 7 - полностью согласен(на).</p>",
             questions: [
                 { prompt: "1. Для меня недопустимо, чтобы мое мнение не совпадало с мнением моей группы.", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
                 { prompt: "2. Я считаю, что человек должен быть независимым и заниматься своими собственными делами.", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
                 { prompt: "3. Я рад(а), когда занимаюсь чем-то вместе с другими.", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
-                { prompt: "4. Я считаю, что конкуренция — это закон природы.", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
+                { prompt: "4. Я считаю, что конкуренция является естественной частью жизни.", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
                 { prompt: "5. Я мог(ла) бы отказаться даже от очень любимого дела, если бы моя семья его не одобряла.", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
                 { prompt: "6. Я очень дорожу свободой своей частной жизни.", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
                 { prompt: "7. Для меня крайне важно поддерживать согласие между членами группы.", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
@@ -1037,7 +979,7 @@ var individualism_collectivism_questionnaire = {
                 { prompt: "12. Работа доставляет мне удовольствие, когда приходится конкурировать с другими людьми.", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
                 { prompt: "13. Я готов(а) делать все, лишь бы угодить своей семье, даже если мне самому(самой) это очень не нравится.", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
                 { prompt: "14. Я считаю, что обычно достигаю успеха благодаря своим собственным способностям.", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
-                { prompt: "15. Проводить время с людьми — это для меня удовольствие.", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
+                { prompt: "15. Мне приятно проводить время с людьми.", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED },
                 { prompt: "16. Я считаю, что благополучное общество невозможно без конкуренции.", labels: ["1","2","3","4","5","6","7"], required: RESPONSES_REQUIRED }
             ],
             button_label: "Продолжить",
@@ -1051,7 +993,7 @@ var individualism_collectivism_questionnaire = {
             preamble:
                 "<h3>Методика диагностики девиантной активности в реальной и виртуальной среде (А. А. Шаров)</h3>" +
                 "<p><b>Инструкция.</b> Выразите, пожалуйста, степень вашего согласия или несогласия с утверждениями опросника.</p>" +
-                "<p>Используя шкалу: 1 – практически никогда; 2 – редко; 3 – иногда; 4 – довольно часто; 5 – постоянно, укажите, насколько вы согласны с этими утверждениями, отметив соответствующий балл.</p>" +
+                "<p>Используя шкалу 1, 2, 3, 4, 5, укажите, насколько вы согласны с этими утверждениями, отметив соответствующий балл. 1 означает практически никогда, 5 означает постоянно.</p>" +
                 "<p>Используйте шкалу от 1 до 5.</p>",
             questions: [
                 { prompt: "1. Разрешение конфликта или неприятной ситуации посредством применения физической силы.", labels: ["Практически никогда", "Редко", "Иногда", "Довольно часто", "Постоянно"], required: RESPONSES_REQUIRED },
@@ -1173,9 +1115,9 @@ var finalize_stage1 = {
             func: function (done) {
                 var textTrials = jsPsych.data.get().filter({trial_type: 'survey-text'}).values();
                 var demoTrial = textTrials.find(function(t) {
-                    return t.responses && typeof t.responses === 'string' && t.responses.indexOf('"Q0"') !== -1;
+                    return t.questionnaire_section === 'demographics';
                 }) || { responses: '{}' };
-                var demoResponses = (typeof demoTrial.responses === 'string') ? JSON.parse(demoTrial.responses) : (demoTrial.responses || {});
+                var demoResponses = safeJsonParse(demoTrial.responses, safeJsonParse(demoTrial.response, {}));
                 var genderTrial = jsPsych.data.get().filter({ questionnaire_item: 'gender' }).last(1).values()[0] || {};
                 STAGE1_PARTICIPANT_ID = 'P' + Date.now();
 
@@ -1236,9 +1178,9 @@ var finalize_stage1 = {
                 stimulus:
                     "<div class='box'><h3>Инструкция. Часть 1. Ранжирование блюд</h3>" +
                     "<p>Сейчас вам будут показаны 9 блюд, которые могут попасть в школьное меню.</p>" +
-                    "<p>Ваша задача — расположить их от самого желательного к наименее желательному.</p>" +
-                    "<p><b>1 место</b> — блюдо, которое вы больше всего хотели бы видеть в школьном меню.</p>" +
-                    "<p><b>9 место</b> — блюдо, которое вы хотели бы видеть реже всего.</p>" +
+                    "<p>Ваша задача: расположить их от самого желательного к наименее желательному.</p>" +
+                    "<p><b>1 место</b>: блюдо, которое вы больше всего хотели бы видеть в школьном меню.</p>" +
+                    "<p><b>9 место</b>: блюдо, которое вы хотели бы видеть реже всего.</p>" +
                     "<p>Сначала расставьте все блюда, потом проверьте порядок и при необходимости измените его.</p>" +
                     "<p>Когда закончите, подтвердите свой выбор и переходите дальше.</p></div>",
                 choices: ["Продолжить"]
@@ -1252,7 +1194,7 @@ var finalize_stage1 = {
                     "<p>Сейчас вы снова увидите те же блюда.</p>" +
                     "<p>Для каждого блюда укажите, насколько оно вам нравится.</p>" +
                     "<p>Шкала от 1 до 5:</p>" +
-                    "<p><b>1</b> — совсем не нравится, <b>5</b> — очень нравится.</p>" +
+                    "<p><b>1</b>: совсем не нравится, <b>5</b>: очень нравится.</p>" +
                     "<p>Отвечайте так, как вы действительно думаете.</p></div>",
                 choices: ["Продолжить"]
             },
@@ -1280,6 +1222,8 @@ var finalize_stage1 = {
             deviant_activity_questionnaire,
             paraphrase_intro,
             paraphrase_task,
+            food_importance_questionnaire,
+            pre_feedback_reminder,
 
             {
                 timeline: [statistics_screen],
@@ -1295,8 +1239,8 @@ var finalize_stage1 = {
                     "<p>Сейчас вам снова будут показаны те же блюда.</p>" +
                     "<p>Для каждого блюда оцените, насколько оно вам нравится <b>сейчас</b>.</p>" +
                     "<p>Шкала от 1 до 5:</p>" +
-                    "<p><b>1</b> — совсем не нравится, <b>5</b> — очень нравится.</p>" +
-                    "<p>Пожалуйста, снова отвечайте, опираясь на свое личное мнение.</p></div>",
+                    "<p><b>1</b>: совсем не нравится, <b>5</b>: очень нравится.</p>" +
+                    "<p>Отвечайте, опираясь на свое текущее мнение после предыдущего этапа.</p></div>",
                 choices: ["Продолжить"]
             },
 
