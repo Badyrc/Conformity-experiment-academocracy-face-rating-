@@ -298,8 +298,11 @@ function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
         }
 
         if (trial.questionnaire_item === 'gender') {
-            row.sex = trial.gender_label || trial.gender_code || row.sex || '';
-            row.gender_code = trial.gender_code || '';
+            var genderIdx = Number(trial.button_pressed);
+            var genderFromButton = genderIdx === 0 ? 'Мужской' : (genderIdx === 1 ? 'Женский' : '');
+            var genderCodeFromButton = genderIdx === 0 ? 'male' : (genderIdx === 1 ? 'female' : '');
+            row.sex = trial.gender_label || trial.sex || genderFromButton || trial.gender_code || row.sex || '';
+            row.gender_code = trial.gender_code || genderCodeFromButton || row.gender_code || '';
         }
 
         if (trial.trial_type === 'survey-likert') {
@@ -746,12 +749,14 @@ var auto_condition_trial = {
             stimulus:
                 "<div class='box'><h3>Анкета</h3><p><b>Укажите ваш пол:</b></p></div>",
             choices: ["Мужской", "Женский"],
+            data: { questionnaire_item: "gender" },
             on_finish: function(data) {
                 var mapping = ["male", "female"];
                 var labels = ["Мужской", "Женский"];
-                data.questionnaire_item = "gender";
-                data.gender_code = mapping[data.button_pressed];
-                data.gender_label = labels[data.button_pressed];
+                var idx = Number(data.button_pressed);
+                data.gender_code = mapping[idx] || "";
+                data.gender_label = labels[idx] || "";
+                data.sex = data.gender_label || "";
             }
         };
 
@@ -1119,6 +1124,8 @@ var finalize_stage1 = {
                 }) || { responses: '{}' };
                 var demoResponses = safeJsonParse(demoTrial.responses, safeJsonParse(demoTrial.response, {}));
                 var genderTrial = jsPsych.data.get().filter({ questionnaire_item: 'gender' }).last(1).values()[0] || {};
+                var genderIdx = Number(genderTrial.button_pressed);
+                var genderLabelFallback = genderIdx === 0 ? 'Мужской' : (genderIdx === 1 ? 'Женский' : '');
                 STAGE1_PARTICIPANT_ID = 'P' + Date.now();
 
                 jsPsych.data.write({
@@ -1144,7 +1151,7 @@ var finalize_stage1 = {
                 });
 
                 var ageRaw = demoResponses.Q0 || '';
-                var sexRaw = genderTrial.gender_label || '';
+                var sexRaw = genderTrial.gender_label || genderTrial.sex || genderLabelFallback || '';
                 STAGE2_URL = 'index_combined.html?participant_id=' + encodeURIComponent(STAGE1_PARTICIPANT_ID)
                     + '&age=' + encodeURIComponent(ageRaw)
                     + '&sex=' + encodeURIComponent(sexRaw)
