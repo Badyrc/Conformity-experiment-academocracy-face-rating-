@@ -227,6 +227,7 @@ var STAGE1_PARTICIPANT_ID = '';
 var STAGE2_URL = '';
 var DEMO_GENDER_LABEL = '';
 var DEMO_GENDER_CODE = '';
+var PARTICIPANT_GENDER_TEXT = '';
 var GOOGLE_SHEETS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbz8A-YGjg735zM76TYyGh4LipI5cUx93zQJlujaN570CdBnDHsrMW3_f9R7cYX2Vmwq/exec';
 
 function safeJsonParse(value, fallback) {
@@ -270,8 +271,9 @@ function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
         selected_condition: DEBUG_CONDITION,
         selected_condition_label: CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION,
         age: ageRaw || '',
-        sex: sexRaw || DEMO_GENDER_LABEL || '',
-        gender_label: DEMO_GENDER_LABEL || sexRaw || '',
+        sex: PARTICIPANT_GENDER_TEXT || sexRaw || DEMO_GENDER_LABEL || '',
+        gender: PARTICIPANT_GENDER_TEXT || sexRaw || DEMO_GENDER_LABEL || '',
+        gender_label: PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || sexRaw || '',
         gender_code: DEMO_GENDER_CODE || ''
     };
 
@@ -289,8 +291,9 @@ function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
         }
 
         if (trial.trial_type === 'gender_result') {
-            row.sex = trial.sex || trial.gender_label || row.sex || '';
-            row.gender_label = trial.gender_label || trial.sex || row.gender_label || '';
+            row.sex = trial.sex || trial.gender_label || PARTICIPANT_GENDER_TEXT || row.sex || '';
+            row.gender = trial.sex || trial.gender_label || PARTICIPANT_GENDER_TEXT || row.gender || '';
+            row.gender_label = trial.gender_label || trial.sex || PARTICIPANT_GENDER_TEXT || row.gender_label || '';
             row.gender_code = trial.gender_code || row.gender_code || '';
         }
 
@@ -311,8 +314,9 @@ function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
             var genderIdx = Number(trial.button_pressed);
             var genderFromButton = genderIdx === 0 ? 'Мужской' : (genderIdx === 1 ? 'Женский' : '');
             var genderCodeFromButton = genderIdx === 0 ? 'male' : (genderIdx === 1 ? 'female' : '');
-            row.sex = trial.gender_label || trial.sex || DEMO_GENDER_LABEL || genderFromButton || trial.gender_code || row.sex || '';
-            row.gender_label = trial.gender_label || trial.sex || DEMO_GENDER_LABEL || genderFromButton || row.gender_label || '';
+            row.sex = trial.gender_label || trial.sex || PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || genderFromButton || row.sex || '';
+            row.gender = trial.gender_label || trial.sex || PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || genderFromButton || row.gender || '';
+            row.gender_label = trial.gender_label || trial.sex || PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || genderFromButton || row.gender_label || '';
             row.gender_code = trial.gender_code || DEMO_GENDER_CODE || genderCodeFromButton || row.gender_code || '';
         }
 
@@ -395,8 +399,9 @@ function sendStage1DataToGoogleSheets(participantId, ageRaw, sexRaw) {
         stage: 'stage1',
         participant_id: participantId,
         age: ageRaw || '',
-        sex: sexRaw || DEMO_GENDER_LABEL || '',
-        gender_label: DEMO_GENDER_LABEL || '',
+        sex: PARTICIPANT_GENDER_TEXT || sexRaw || DEMO_GENDER_LABEL || '',
+        gender: PARTICIPANT_GENDER_TEXT || sexRaw || DEMO_GENDER_LABEL || '',
+        gender_label: PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || '',
         gender_code: DEMO_GENDER_CODE || '',
         condition: CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION,
         raw_rows: rawRows,
@@ -770,12 +775,14 @@ var auto_condition_trial = {
                 data.gender_code = mapping[idx] || "";
                 data.gender_label = labels[idx] || "";
                 data.sex = data.gender_label || "";
+                PARTICIPANT_GENDER_TEXT = data.gender_label || "";
                 DEMO_GENDER_CODE = data.gender_code || "";
                 DEMO_GENDER_LABEL = data.gender_label || "";
                 jsPsych.data.addProperties({
+                    gender: PARTICIPANT_GENDER_TEXT,
                     gender_code: DEMO_GENDER_CODE,
-                    gender_label: DEMO_GENDER_LABEL,
-                    sex: DEMO_GENDER_LABEL
+                    gender_label: PARTICIPANT_GENDER_TEXT,
+                    sex: PARTICIPANT_GENDER_TEXT
                 });
             }
         };
@@ -1151,8 +1158,9 @@ var finalize_stage1 = {
                 jsPsych.data.write({
                     trial_type: "gender_result",
                     questionnaire_item: "gender",
-                    sex: DEMO_GENDER_LABEL || genderTrial.gender_label || genderTrial.sex || genderLabelFallback || '',
-                    gender_label: DEMO_GENDER_LABEL || genderTrial.gender_label || genderTrial.sex || genderLabelFallback || '',
+                    sex: PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || genderTrial.gender_label || genderTrial.sex || genderLabelFallback || '',
+                    gender: PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || genderTrial.gender_label || genderTrial.sex || genderLabelFallback || '',
+                    gender_label: PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || genderTrial.gender_label || genderTrial.sex || genderLabelFallback || '',
                     gender_code: DEMO_GENDER_CODE || genderTrial.gender_code || (genderIdx === 0 ? 'male' : (genderIdx === 1 ? 'female' : '')),
                     participant_id: STAGE1_PARTICIPANT_ID
                 });
@@ -1177,13 +1185,14 @@ var finalize_stage1 = {
                     participant_id: STAGE1_PARTICIPANT_ID,
                     selected_condition: DEBUG_CONDITION,
                     selected_condition_label: CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION,
-                    sex: DEMO_GENDER_LABEL || genderTrial.gender_label || genderTrial.sex || genderLabelFallback || '',
-                    gender_label: DEMO_GENDER_LABEL || genderTrial.gender_label || genderTrial.sex || genderLabelFallback || '',
+                    sex: PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || genderTrial.gender_label || genderTrial.sex || genderLabelFallback || '',
+                    gender: PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || genderTrial.gender_label || genderTrial.sex || genderLabelFallback || '',
+                    gender_label: PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || genderTrial.gender_label || genderTrial.sex || genderLabelFallback || '',
                     gender_code: DEMO_GENDER_CODE || genderTrial.gender_code || (genderIdx === 0 ? 'male' : (genderIdx === 1 ? 'female' : ''))
                 });
 
                 var ageRaw = demoResponses.Q0 || '';
-                var sexRaw = DEMO_GENDER_LABEL || genderTrial.gender_label || genderTrial.sex || genderLabelFallback || '';
+                var sexRaw = PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || genderTrial.gender_label || genderTrial.sex || genderLabelFallback || '';
                 STAGE2_URL = 'index_combined.html?participant_id=' + encodeURIComponent(STAGE1_PARTICIPANT_ID)
                     + '&age=' + encodeURIComponent(ageRaw)
                     + '&sex=' + encodeURIComponent(sexRaw)
