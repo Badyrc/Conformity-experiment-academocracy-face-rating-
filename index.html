@@ -199,7 +199,7 @@
             "Булгур с индейкой",
             "Пюре с куриными котлетами",
             "Гречка с тефтелями",
-            "Рис с курицей",
+            "Картофельная запеканка с мясом",
             "Овощной суп",
             "Макароны с сыром",
             "Запечённая рыба с картофелем",
@@ -225,6 +225,8 @@ DEBUG_CONDITION = assignCondition();
 var RESPONSES_REQUIRED = false;
 var STAGE1_PARTICIPANT_ID = '';
 var STAGE2_URL = '';
+var DEMO_GENDER_LABEL = '';
+var DEMO_GENDER_CODE = '';
 var GOOGLE_SHEETS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbz8A-YGjg735zM76TYyGh4LipI5cUx93zQJlujaN570CdBnDHsrMW3_f9R7cYX2Vmwq/exec';
 
 function safeJsonParse(value, fallback) {
@@ -268,7 +270,8 @@ function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
         selected_condition: DEBUG_CONDITION,
         selected_condition_label: CONDITION_MAP[DEBUG_CONDITION] || DEBUG_CONDITION,
         age: ageRaw || '',
-        sex: sexRaw || ''
+        sex: sexRaw || DEMO_GENDER_LABEL || '',
+        gender_code: DEMO_GENDER_CODE || ''
     };
 
     for (var rr = 0; rr < ranked.length; rr++) {
@@ -301,8 +304,8 @@ function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
             var genderIdx = Number(trial.button_pressed);
             var genderFromButton = genderIdx === 0 ? 'Мужской' : (genderIdx === 1 ? 'Женский' : '');
             var genderCodeFromButton = genderIdx === 0 ? 'male' : (genderIdx === 1 ? 'female' : '');
-            row.sex = trial.gender_label || trial.sex || genderFromButton || trial.gender_code || row.sex || '';
-            row.gender_code = trial.gender_code || genderCodeFromButton || row.gender_code || '';
+            row.sex = trial.gender_label || trial.sex || DEMO_GENDER_LABEL || genderFromButton || trial.gender_code || row.sex || '';
+            row.gender_code = trial.gender_code || DEMO_GENDER_CODE || genderCodeFromButton || row.gender_code || '';
         }
 
         if (trial.trial_type === 'survey-likert') {
@@ -757,6 +760,13 @@ var auto_condition_trial = {
                 data.gender_code = mapping[idx] || "";
                 data.gender_label = labels[idx] || "";
                 data.sex = data.gender_label || "";
+                DEMO_GENDER_CODE = data.gender_code || "";
+                DEMO_GENDER_LABEL = data.gender_label || "";
+                jsPsych.data.addProperties({
+                    gender_code: DEMO_GENDER_CODE,
+                    gender_label: DEMO_GENDER_LABEL,
+                    sex: DEMO_GENDER_LABEL
+                });
             }
         };
 
@@ -1151,7 +1161,7 @@ var finalize_stage1 = {
                 });
 
                 var ageRaw = demoResponses.Q0 || '';
-                var sexRaw = genderTrial.gender_label || genderTrial.sex || genderLabelFallback || '';
+                var sexRaw = DEMO_GENDER_LABEL || genderTrial.gender_label || genderTrial.sex || genderLabelFallback || '';
                 STAGE2_URL = 'index_combined.html?participant_id=' + encodeURIComponent(STAGE1_PARTICIPANT_ID)
                     + '&age=' + encodeURIComponent(ageRaw)
                     + '&sex=' + encodeURIComponent(sexRaw)
