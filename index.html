@@ -281,15 +281,15 @@ function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
         }
 
         if (trial.trial_type === 'survey-text') {
-            var textResp = safeJsonParse(trial.responses, {});
+            var textResp = safeJsonParse(trial.responses, safeJsonParse(trial.response, {}));
             if (trial.questionnaire_section === 'paraphrase_task') {
                 row.paraphrase_1 = textResp.Q0 || '';
                 row.paraphrase_2 = textResp.Q1 || '';
                 row.paraphrase_3 = textResp.Q2 || '';
-            } else if (!row.age && textResp.Q0 !== undefined) {
-                row.age = textResp.Q0 || '';
-                row.class_or_course = textResp.Q1 || '';
-                row.city = textResp.Q2 || '';
+            } else if (trial.questionnaire_section === 'demographics') {
+                row.age = textResp.Q0 || row.age || '';
+                row.class_or_course = textResp.Q1 || row.class_or_course || '';
+                row.city = textResp.Q2 || row.city || '';
             }
         }
 
@@ -335,6 +335,16 @@ function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
                 for (var d = 0; d < 28; d++) {
                     row['deviant_q' + (d + 1)] = likertResp['Q' + d] !== undefined ? Number(likertResp['Q' + d]) + 1 : '';
                 }
+            }
+
+            if (trial.questionnaire_section === 'Individualism Collectivism 16') {
+                for (var ic = 0; ic < 16; ic++) {
+                    row['indcol_q' + (ic + 1)] = likertResp['Q' + ic] !== undefined ? Number(likertResp['Q' + ic]) + 1 : '';
+                }
+            }
+
+            if (trial.questionnaire_section === 'Food Importance') {
+                row.food_importance_q1 = likertResp.Q0 !== undefined ? Number(likertResp.Q0) + 1 : '';
             }
 
             if (trial.questionnaire_section === 'SCM' && trial.scm_group) {
@@ -585,12 +595,12 @@ var auto_condition_trial = {
 
         function getStatisticsAnnotation() {
             if (DEBUG_CONDITION === "ingroup") {
-                return "Из-за голосования подростков эти блюда вряд ли войдут в итоговое меню.";
+                return "По предварительным результатам голосования подростков эти блюда, скорее всего, не будут включены в итоговый вариант школьного меню.";
             }
             if (DEBUG_CONDITION === "outgroup") {
-                return "Из-за голосования взрослых эти блюда вряд ли войдут в итоговое меню.";
+                return "По предварительным результатам голосования взрослых эти блюда, скорее всего, не будут включены в итоговый вариант школьного меню.";
             }
-            return "Эти блюда вряд ли войдут в итоговое меню.";
+            return "По предварительным результатам эти блюда, скорее всего, не будут включены в итоговый вариант школьного меню.";
         }
 
         var statistics_screen = {
@@ -614,6 +624,32 @@ var auto_condition_trial = {
                 `;
             },
             choices: ["Продолжить"]
+        };
+
+        var pre_feedback_reminder = {
+            type: "html-button-response",
+            stimulus:
+                "<div class='box'><h3>Напоминание</h3>" +
+                "<p>В начале исследования вы расположили блюда по предпочтению и отдельно оценили, насколько вам нравится каждое из них.</p>" +
+                "<p>Сейчас мы покажем вам краткую информацию, связанную с предыдущим этапом, а затем попросим еще раз оценить блюда.</p>" +
+                "<p>Пожалуйста, внимательно прочитайте информацию на следующем экране.</p></div>",
+            choices: ["Продолжить"]
+        };
+
+        var food_importance_questionnaire = {
+            type: "survey-likert",
+            preamble:
+                "<h3>Короткий вопрос</h3>" +
+                "<p>Пожалуйста, ответьте еще на один короткий вопрос.</p>",
+            questions: [
+                {
+                    prompt: "1. Насколько для вас в целом важно, чтобы школьная еда вам нравилась?",
+                    labels: ["1", "2", "3", "4", "5", "6", "7"],
+                    required: RESPONSES_REQUIRED
+                }
+            ],
+            button_label: "Продолжить",
+            data: { questionnaire_section: "Food Importance" }
         };
 
         // -
@@ -786,7 +822,8 @@ var auto_condition_trial = {
                 { prompt: "Класс / курс:", rows: 1, columns: 20, required: false },
                 { prompt: "Город:", rows: 1, columns: 25, required: false }
             ],
-            button_label: "Продолжить"
+            button_label: "Продолжить",
+            data: { questionnaire_section: "demographics" }
         };
 
         var start_questionnaire_gender = {
@@ -1163,9 +1200,9 @@ var finalize_stage1 = {
             func: function (done) {
                 var textTrials = jsPsych.data.get().filter({trial_type: 'survey-text'}).values();
                 var demoTrial = textTrials.find(function(t) {
-                    return t.responses && typeof t.responses === 'string' && t.responses.indexOf('"Q0"') !== -1;
+                    return t.questionnaire_section === 'demographics';
                 }) || { responses: '{}' };
-                var demoResponses = (typeof demoTrial.responses === 'string') ? JSON.parse(demoTrial.responses) : (demoTrial.responses || {});
+                var demoResponses = safeJsonParse(demoTrial.responses, safeJsonParse(demoTrial.response, {}));
                 var genderTrial = jsPsych.data.get().filter({ questionnaire_item: 'gender' }).last(1).values()[0] || {};
                 STAGE1_PARTICIPANT_ID = 'P' + Date.now();
 
@@ -1270,6 +1307,8 @@ var finalize_stage1 = {
             deviant_activity_questionnaire,
             paraphrase_intro,
             paraphrase_task,
+            food_importance_questionnaire,
+            pre_feedback_reminder,
 
             {
                 timeline: [statistics_screen],
@@ -1286,7 +1325,7 @@ var finalize_stage1 = {
                     "<p>Для каждого блюда оцените, насколько оно вам нравится <b>сейчас</b>.</p>" +
                     "<p>Шкала от 1 до 5:</p>" +
                     "<p><b>1</b> — совсем не нравится, <b>5</b> — очень нравится.</p>" +
-                    "<p>Пожалуйста, снова отвечайте, опираясь на свое личное мнение.</p></div>",
+                    "<p>Отвечайте, опираясь на свое текущее мнение после предыдущего этапа.</p></div>",
                 choices: ["Продолжить"]
             },
 
