@@ -292,8 +292,6 @@ function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
 
         if (trial.trial_type === 'gender_result') {
             row.sex = trial.sex || trial.gender_label || PARTICIPANT_GENDER_TEXT || row.sex || '';
-            row.gender = trial.sex || trial.gender_label || PARTICIPANT_GENDER_TEXT || row.gender || '';
-            row.gender_label = trial.gender_label || trial.sex || PARTICIPANT_GENDER_TEXT || row.gender_label || '';
             row.gender_code = trial.gender_code || row.gender_code || '';
         }
 
@@ -316,8 +314,6 @@ function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
             var genderFromResponse = genderIdx === 0 ? 'Мужской' : (genderIdx === 1 ? 'Женский' : '');
             var genderCodeFromResponse = genderIdx === 0 ? 'male' : (genderIdx === 1 ? 'female' : '');
             row.sex = trial.gender_label || trial.sex || PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || genderFromResponse || row.sex || '';
-            row.gender = trial.gender_label || trial.sex || PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || genderFromResponse || row.gender || '';
-            row.gender_label = trial.gender_label || trial.sex || PARTICIPANT_GENDER_TEXT || DEMO_GENDER_LABEL || genderFromResponse || row.gender_label || '';
             row.gender_code = trial.gender_code || DEMO_GENDER_CODE || genderCodeFromResponse || row.gender_code || '';
         }
 
@@ -327,8 +323,6 @@ function buildStage1FormattedRow(participantId, ageRaw, sexRaw) {
             if (trial.questionnaire_section === 'demographics_gender') {
                 var genderIdxLikert = likertResp.Q0 !== undefined ? Number(likertResp.Q0) : -1;
                 row.sex = genderIdxLikert === 0 ? 'Мужской' : (genderIdxLikert === 1 ? 'Женский' : row.sex || '');
-                row.gender = row.sex;
-                row.gender_label = row.sex;
                 row.gender_code = genderIdxLikert === 0 ? 'male' : (genderIdxLikert === 1 ? 'female' : row.gender_code || '');
             }
 
