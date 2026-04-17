@@ -996,34 +996,32 @@ var reactance_questionnaire = {
         { prompt: "14. Меня разочаровывает, когда я вижу, как другие подчиняются стандартам и правилам общества.", labels: ["Никогда", "Редко", "Иногда", "В большинстве случаев", "Всегда"], required: RESPONSES_REQUIRED }
     ],
     button_label: "Продолжить",
-    data: { questionnaire_section: "Hong Reactance Scale" }
-};
-            on_finish: function(data) {
-                try {
-                    var responses = JSON.parse(data.responses);
+    data: { questionnaire_section: "Hong Reactance Scale" },
+    on_finish: function(data) {
+        try {
+            var responses = JSON.parse(data.responses);
 
-                    function mean(arr) {
-                        return arr.reduce(function(a, b) { return a + b; }, 0) / arr.length;
-                    }
-
-                    function valuesFrom(indices) {
-                        return indices.map(function(i) { return (responses["Q" + i] || 0) + 1; });
-                    }
-
-                    data.reactance_norm_mean = mean(valuesFrom([0, 2, 12, 13]));
-                    data.reactance_independence_mean = mean(valuesFrom([3, 9, 10]));
-                    data.reactance_resistance_mean = mean(valuesFrom([4, 8, 11]));
-                    data.reactance_emotional_mean = mean(valuesFrom([5, 6, 7]));
-
-                    var all_values = [];
-                    for (var i = 0; i < 14; i++) {
-                        all_values.push((responses["Q" + i] || 0) + 1);
-                    }
-                    data.reactance_total_mean = mean(all_values);
-                } catch (e) {}
+            function mean(arr) {
+                return arr.reduce(function(a, b) { return a + b; }, 0) / arr.length;
             }
-        };
 
+            function valuesFrom(indices) {
+                return indices.map(function(i) { return (responses["Q" + i] || 0) + 1; });
+            }
+
+            data.reactance_norm_mean = mean(valuesFrom([0, 2, 12, 13]));
+            data.reactance_independence_mean = mean(valuesFrom([3, 9, 10]));
+            data.reactance_resistance_mean = mean(valuesFrom([4, 8, 11]));
+            data.reactance_emotional_mean = mean(valuesFrom([5, 6, 7]));
+
+            var all_values = [];
+            for (var i = 0; i < 14; i++) {
+                all_values.push((responses["Q" + i] || 0) + 1);
+            }
+            data.reactance_total_mean = mean(all_values);
+        } catch (e) {}
+    }
+};
 var individualism_collectivism_questionnaire = {
             type: "survey-likert",
             preamble:
