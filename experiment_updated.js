@@ -445,8 +445,8 @@ timeline.push({
     <div style="text-align:center; font-size:30px; font-weight:700; margin-bottom:26px;">Добро пожаловать!</div>
     <p>В этой части эксперимента вам нужно будет оценивать привлекательность лиц.</p>
     <p>Сначала в центре экрана появится лицо.</p>
-    <p>После того как лицо исчезнет, в центре экрана будет показана оценка других участников.</p>
-    <p>Зелёный квадрат показывает, какую оценку поставило большинство других участников.</p>
+    <p><b>После того как лицо исчезнет, в центре экрана в зелёном будет показана оценка большинство участников.</b></p>
+    <p><b>Зелёный квадрат показывает, какую оценку поставило большинство других участников.</b></p>
 <p><b>Оценивайте лицо, нажимая соответствующую цифру на клавиатуре: от 1 (очень непривлекательно) до 9 (очень привлекательно).</b></p>
 <p>Пожалуйста, старайтесь давать оценку как можно быстрее, не раздумывая слишком долго.</p>
     <p>Если изображение лица не загрузилось (например, из-за проблем с интернетом), нажмите клавишу «0».</p>
@@ -518,16 +518,32 @@ timeline.push({
     data: { phase: 'instructions_2' }
   });
 
-  timeline.push({
-    type: jsPsychHtmlKeyboardResponse,
-    stimulus: function() {
-      return `
-        <div style="max-width:900px; margin:40px auto; font-family:Arial,sans-serif; color:black; text-align:left; line-height:1.7; font-size:22px;">
-          <div style="text-align:center; font-size:30px; font-weight:700; margin-bottom:28px;">Оценка письменного задания</div>
-          <p>${assignedFeedback.text}</p>
-          <p style="margin-top:34px; text-align:center;"><strong>Нажмите пробел, чтобы продолжить.</strong></p>
-        </div>`;
-    },
+ stimulus: function() {
+  return `
+    <div style="max-width:900px; margin:40px auto; font-family:Arial,sans-serif; color:black; text-align:left; line-height:1.7; font-size:22px;">
+      
+      <div style="text-align:center; font-size:30px; font-weight:700; margin-bottom:28px;">
+        Оценка письменного задания
+      </div>
+
+      <div style="
+        max-width:700px;
+        margin:30px auto;
+        padding:24px 28px;
+        border-radius:12px;
+        background:#f4f6f8;
+        border:2px solid #d1d9e0;
+        box-shadow:0 4px 12px rgba(0,0,0,0.08);
+        text-align:left;
+      ">
+        ${assignedFeedback.text}
+      </div>
+
+      <p style="margin-top:34px; text-align:center;">
+        <strong>Нажмите пробел, чтобы продолжить.</strong>
+      </p>
+    </div>`;
+},
     choices: [' '],
     data: {
       phase: 'feedback_message',
