@@ -624,7 +624,7 @@ stimulus: function() {
     preamble: '<h3>Вопросы о сообщении</h3><p>Пожалуйста, оцените ваше впечатление от сообщения.</p>',
     html: `
       <div style="text-align:left; max-width:760px; margin:0 auto; line-height:1.8;">
-<p>Насколько вы согласны с сообщением, в котором оценивалось ваше выполнение задания на переформулировку (которое вы видели ранее)?</p>
+<p>1. Насколько вы согласны с сообщением, в котором оценивалось ваше выполнение задания на переформулировку (которое вы видели ранее)?</p>
 <p>1 — совсем не согласен, 7 — полностью согласен</p>
         ${[1,2,3,4,5,6,7].map(v => `<label style="margin-right:12px;"><input type="radio" name="agree_assessment" value="${v}" ${RESPONSES_REQUIRED ? 'required' : ''}> ${v}</label>`).join('')}
         <p style="margin-top:20px;">2. Насколько справедливым вам показалось это сообщение?</p>
@@ -637,10 +637,10 @@ stimulus: function() {
     data: { phase: 'message_questionnaire' }
   });
 
-  timeline.push({
-    type: jsPsychSurveyHtmlForm,
-    preamble: '<h3>Дополнительные вопросы</h3><p>Ниже несколько вопросов о вашем впечатлении от исследования.</p>',
-    html: `
+timeline.push({
+  type: jsPsychSurveyHtmlForm,
+  preamble: '<h3>Дополнительные вопросы</h3><p>Ниже несколько вопросов о вашем впечатлении от исследования.</p><p><b>После нажатия кнопки «Продолжить», пожалуйста, не закрывайте окно и дождитесь загрузки следующего экрана. Это может занять 10–15 секунд.</b></p>',
+  html: `
       <div style="text-align:left; max-width:780px; margin:0 auto; line-height:1.8;">
         <p>1. Как вы думаете, какова была настоящая цель исследования?</p>
         <textarea name="study_guess" rows="4" style="width:100%;"></textarea>
