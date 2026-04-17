@@ -518,7 +518,9 @@ timeline.push({
     data: { phase: 'instructions_2' }
   });
 
- stimulus: function() {
+ timeline.push({
+  type: jsPsychHtmlKeyboardResponse,
+stimulus: function() {
   return `
     <div style="max-width:900px; margin:40px auto; font-family:Arial,sans-serif; color:black; text-align:left; line-height:1.7; font-size:22px;">
       
