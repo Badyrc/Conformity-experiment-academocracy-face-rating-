@@ -533,8 +533,8 @@ stimulus: function() {
         margin:30px auto;
         padding:24px 28px;
         border-radius:12px;
-        background:#f4f6f8;
-        border:2px solid #d1d9e0;
+        background:#ef2ff;
+        border:2px solid #5b6cff;
         box-shadow:0 4px 12px rgba(0,0,0,0.08);
         text-align:left;
       ">
