@@ -328,14 +328,14 @@
       <div style="max-width:920px; margin:30px auto; font-family:Arial,sans-serif; color:black; text-align:center;">
         <h2 style="margin-bottom:14px;">Небольшой перерыв</h2>
         <p style="font-size:20px; line-height:1.5; max-width:760px; margin:0 auto 16px;">
-          Перед началом следующей части исследования, пожалуйста, сделайте 5-минутный перерыв.
+Сейчас экспериментаторы проверяют ваши ответы на задание с переформулировкой. Это займет несколько минут. Пожалуйста, сделайте 5-минутный перерыв - выше вы увидите таймер..
         </p>
         <p style="font-size:18px; line-height:1.5; max-width:760px; margin:0 auto 20px;">
-          Ниже можно поиграть в спокойную мини-игру: нажимайте на светлячков, когда они появляются на экране.
+          Ниже можно поиграть в мини-игру: нажимайте на светлячков, когда они появляются на экране.
         </p>
         <div id="breakTimer" style="font-size:28px; font-weight:700; margin-bottom:18px;">05:00</div>
         <canvas id="fireflyCanvas" width="820" height="420" style="max-width:90vw; border:1px solid #ddd; border-radius:14px; background:linear-gradient(180deg,#0e1a2b,#152941);"></canvas>
-        <div style="margin-top:16px; color:#f7f3c6;">Поймано светлячков: <span id="fireflyScore">0</span></div>
+        <div style="margin-top:16px; color:#000000;">Поймано светлячков: <span id="fireflyScore">0</span></div>
         <div style="margin-top:20px;">
           <button id="breakContinue" style="display:none; padding:12px 22px; font-size:18px; cursor:pointer;">Продолжить</button>
         </div>
@@ -439,22 +439,23 @@
     button_label: 'Начать'
   });
 
-  timeline.push({
-    type: jsPsychHtmlKeyboardResponse,
-    stimulus: instructionBlock(`
-      <div style="text-align:center; font-size:30px; font-weight:700; margin-bottom:26px;">Добро пожаловать!</div>
-      <p>В этой части эксперимента вам нужно будет оценивать привлекательность лиц.</p>
-      <p>Сначала в центре экрана появится лицо.</p>
-      <p>После того как лицо исчезнет, в центре экрана будет показана оценка других участников.</p>
-      <p>Зелёный квадрат показывает, какую оценку поставило большинство других участников.</p>
-      <p>Вам нужно оценить лицо по шкале от 1 (очень непривлекательно) до 9 (очень привлекательно).</p>
-      <p>Пожалуйста, старайтесь давать оценку как можно быстрее, не раздумывая слишком долго.</p>
-      <p>Сначала мы проведём короткую тренировочную серию.</p>
-      <p style="margin-top:28px; text-align:center;"><strong>Если вы готовы, нажмите пробел, чтобы начать.</strong></p>
-    `),
-    choices: [' '],
-    data: { phase: 'instructions_1' }
-  });
+timeline.push({
+  type: jsPsychHtmlKeyboardResponse,
+  stimulus: instructionBlock(`
+    <div style="text-align:center; font-size:30px; font-weight:700; margin-bottom:26px;">Добро пожаловать!</div>
+    <p>В этой части эксперимента вам нужно будет оценивать привлекательность лиц.</p>
+    <p>Сначала в центре экрана появится лицо.</p>
+    <p>После того как лицо исчезнет, в центре экрана будет показана оценка других участников.</p>
+    <p>Зелёный квадрат показывает, какую оценку поставило большинство других участников.</p>
+<p><b>Оценивайте лицо, нажимая соответствующую цифру на клавиатуре: от 1 (очень непривлекательно) до 9 (очень привлекательно).</b></p>
+<p>Пожалуйста, старайтесь давать оценку как можно быстрее, не раздумывая слишком долго.</p>
+    <p>Если изображение лица не загрузилось (например, из-за проблем с интернетом), нажмите клавишу «0».</p>
+    <p>Сначала мы проведём короткую тренировочную серию.</p>
+    <p style="margin-top:28px; text-align:center;"><strong>Если вы готовы, нажмите пробел, чтобы начать.</strong></p>
+  `),
+  choices: [' '],
+  data: { phase: 'instructions_1' }
+});
 
   timeline.push({
     type: jsPsychHtmlKeyboardResponse,
@@ -605,13 +606,12 @@
     preamble: '<h3>Вопросы о сообщении</h3><p>Пожалуйста, оцените ваше впечатление от сообщения.</p>',
     html: `
       <div style="text-align:left; max-width:760px; margin:0 auto; line-height:1.8;">
-        <p>1. Насколько вы согласны с данной оценкой?</p>
+<p>Насколько вы согласны с сообщением, в котором оценивалось ваше выполнение задания на переформулировку (которое вы видели ранее)? 1 — совсем не согласен, 7 — полностью согласен.</p>
         ${[1,2,3,4,5,6,7].map(v => `<label style="margin-right:12px;"><input type="radio" name="agree_assessment" value="${v}" ${RESPONSES_REQUIRED ? 'required' : ''}> ${v}</label>`).join('')}
         <p style="margin-top:20px;">2. Насколько справедливым вам показалось это сообщение?</p>
         ${[1,2,3,4,5,6,7].map(v => `<label style="margin-right:12px;"><input type="radio" name="fairness_message" value="${v}" ${RESPONSES_REQUIRED ? 'required' : ''}> ${v}</label>`).join('')}
         <p style="margin-top:20px;">3. Насколько неприятным для вас было это сообщение?</p>
         ${[1,2,3,4,5,6,7].map(v => `<label style="margin-right:12px;"><input type="radio" name="message_unpleasant" value="${v}" ${RESPONSES_REQUIRED ? 'required' : ''}> ${v}</label>`).join('')}
-        <p style="margin-top:8px; color:#555;">Шкала: 1 — совсем нет, 7 — очень сильно.</p>
       </div>
     `,
     button_label: 'Продолжить',
